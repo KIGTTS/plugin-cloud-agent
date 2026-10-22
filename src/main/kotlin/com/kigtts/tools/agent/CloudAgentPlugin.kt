@@ -8,11 +8,12 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "云端助手", "对话、管理快捷文本与创建小工具", version = "0.9.13")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "云端助手", "对话、管理快捷文本与创建小工具", version = "0.9.14")
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
     private lateinit var runner: AgentRunner
+    private lateinit var notifications: AgentTaskNotifications
     private lateinit var catalog: AgentModelCatalog
     private lateinit var providers: AgentProviderController
     private lateinit var reviews: AgentReviewController
@@ -26,7 +27,8 @@ class CloudAgentPlugin : KigPlugin {
         if (store.settings.access == AgentAccessMode.FULL && !store.settings.fullAccessConfirmed)
             store.updateSettings { it.copy(access = AgentAccessMode.REQUEST_APPROVAL) }
         secrets = KeystoreAgentSecrets(environment.storage)
-        runner = ConcurrentAgentRunner(store, secrets, environment, ::changed)
+        notifications = AgentTaskNotifications(store, environment)
+        runner = ConcurrentAgentRunner(store, secrets, environment, ::changed, notifications::changed)
         reviews = AgentReviewController(environment, store, runner)
         catalog = AgentModelCatalog(store, secrets, ::changed, HttpsModelsTransport { environment.requirePermission("network") })
         providers = AgentProviderController(store, secrets, runner, catalog)
@@ -122,6 +124,8 @@ class CloudAgentPlugin : KigPlugin {
                     runner.send(conversation.id, text); PluginOutcome.RefreshUi
                 }
                 actionId == "stop" -> { store.target(context)?.id?.let(runner::stopConversation); PluginOutcome.RefreshUi }
+                actionId.startsWith("notification-open/") -> { store.select(actionId.substringAfter('/')); PluginOutcome.OpenPage("chat") }
+                actionId.startsWith("notification-stop/") -> { runner.stopConversation(actionId.substringAfter('/')); PluginOutcome.RefreshUi }
                 actionId.startsWith("export-conversation/") -> {
                     val conversation = store.get(actionId.substringAfter('/')) ?: return PluginOutcome.Message("会话不存在")
                     val path = "exports/conversation-${conversation.id}.json"
@@ -150,6 +154,11 @@ class CloudAgentPlugin : KigPlugin {
                 }
                 actionId == "reasoning" -> { store.updateSettings { it.copy(showReasoning = !it.showReasoning) }; PluginOutcome.RefreshUi }
                 actionId == "pin-home-icon" -> { store.updateSettings { it.copy(pinHomeIcon = !it.pinHomeIcon) }; PluginOutcome.RefreshUi }
+                actionId == "task-notifications" -> {
+                    store.updateSettings { it.copy(taskNotifications = !it.taskNotifications) }
+                    if (!store.settings.taskNotifications) notifications.clear()
+                    PluginOutcome.RefreshUi
+                }
                 actionId == "tools" -> {
                     check(!runner.running) { "请先停止当前回答" }; store.updateSettings { it.copy(toolsEnabled = !it.toolsEnabled) }; PluginOutcome.RefreshUi
                 }
@@ -180,5 +189,5 @@ class CloudAgentPlugin : KigPlugin {
         store.setPending(PendingReview(conversation.id, "", reply.value.token, "导入内容已准备好，请审核"))
         return reviews.open()
     }
-    override suspend fun close() { if (::catalog.isInitialized) catalog.close(); if (::runner.isInitialized) runner.close(); uiSignals.close() }
+    override suspend fun close() { if (::catalog.isInitialized) catalog.close(); if (::runner.isInitialized) runner.close(); if (::notifications.isInitialized) notifications.close(); uiSignals.close() }
 }

@@ -9,6 +9,7 @@ internal fun agentSettingsPage(id: String, store: AgentStore, secrets: AgentSecr
         "settings" -> PluginPage(id, "助手设置", listOf(
             PageBlock.Group("模型服务", listOf(PageBlock.Actions(listOf(PageAction("connections", "供应商、密钥与模型管理", PluginIcon.SETTINGS))))),
             PageBlock.Group("使用体验", listOf(
+                PageBlock.Toggle("任务通知", settings.taskNotifications, "task-notifications", "显示执行进度、完成结果与会话入口", PluginIcon.NONE),
                 PageBlock.Toggle("常驻主页图标", settings.pinHomeIcon, "pin-home-icon", "执行任务时自动显示进度，也可始终保留入口", PluginIcon.ROBOT2),
                 PageBlock.Toggle("显示思考过程", settings.showReasoning, "reasoning", "展开查看服务公开返回的思考内容", PluginIcon.TEXT),
                 PageBlock.Toggle("允许操作软件", settings.toolsEnabled, "tools", "在会话输入框上方切换审批模式", PluginIcon.SETTINGS)))

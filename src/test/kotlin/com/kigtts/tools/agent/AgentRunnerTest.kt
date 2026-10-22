@@ -28,11 +28,13 @@ class AgentRunnerTest {
                 delta(result); result.accept("[DONE]"); return result
             }
         }
-        val runner = AgentRunner(store, secrets, transport, AgentTools(env), {}, this)
+        val events = mutableListOf<Pair<String, Boolean>>()
+        val runner = AgentRunner(store, secrets, transport, AgentTools(env), {}, this, taskChanged = { id, active -> events += id to active })
         runner.send(conversation.id, "hello"); advanceUntilIdle()
         assertEquals("你好", store.get(conversation.id)!!.messages.last().content)
         assertEquals(MessageState.COMPLETE, store.get(conversation.id)!!.messages.last().state)
         assertFalse(runner.running); assertNull(runner.runningConversation)
+        assertEquals(listOf(conversation.id to true, conversation.id to false), events)
     }
     @Test fun immediateAnswerDoesNotLeaveUiPermanentlyRunning() {
         val env = environment(); val store = AgentStore(env.storage); store.updateSettings { it.copy(access = AgentAccessMode.FULL) }; val conversation = store.create()

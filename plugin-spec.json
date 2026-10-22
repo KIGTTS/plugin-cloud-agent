@@ -1,16 +1,18 @@
 {
   "id": "tools.cloud-agent",
   "name": "云端助手",
-  "version": "0.9.13",
-  "versionCode": 17,
+  "version": "0.9.14",
+  "versionCode": 18,
   "entryClass": "com.kigtts.tools.agent.CloudAgentPlugin",
-  "apiVersion": 14,
+  "apiVersion": 20,
   "minSdk": 26,
   "runtime": "android-dex",
   "license": "MIT",
+  "icon": { "symbol": "robot_2" },
   "capabilities": [
     "ui",
     "network",
+    "notifications",
     "app-control",
     "quick-text-read",
     "quick-text-write",
@@ -18,6 +20,7 @@
     "stickers-write"
   ],
   "permissionPurposes": {
+    "notifications": "显示你发起的AI任务进度、完成或待确认提醒，并提供返回对应会话和停止任务的按钮。",
     "network": "连接用户配置的AI供应商获取模型、发送对话及用户选择的图片，按任务搜索网页和公开图片、下载图片及页面素材。",
     "app-control": "按用户任务调整应用设置、提交字幕及调试用户授权的Lua插件。",
     "quick-text-read": "读取用户指定的快捷文本、分组及页面文件以编辑和验收。",

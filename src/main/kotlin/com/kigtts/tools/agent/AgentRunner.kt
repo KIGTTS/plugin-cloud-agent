@@ -10,7 +10,8 @@ import kotlinx.serialization.json.put
 open class AgentRunner(private val store: AgentStore, private val secrets: AgentSecrets, private val transport: ChatTransport,
     private val tools: AgentTools, private val changed: () -> Unit,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    private val boundConversation: String? = null) {
+    private val boundConversation: String? = null,
+    private val taskChanged: (String, Boolean) -> Unit = { _, _ -> }) {
     @Volatile private var queuePaused = false
     @Volatile private var active: Job? = null
     @Volatile private var activeConversation: String? = null
@@ -65,9 +66,10 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
                 }
                 respond(id, settings)
             }
-            finally { synchronized(this@AgentRunner) { activeConversation = null; active = null; changed(); startQueued() } }
+            finally { synchronized(this@AgentRunner) { activeConversation = null; active = null; taskChanged(id, false); changed(); startQueued() } }
         }
         active = job
+        taskChanged(id, true)
         job.start()
         changed()
     }
