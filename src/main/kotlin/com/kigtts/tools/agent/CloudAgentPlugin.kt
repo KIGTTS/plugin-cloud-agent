@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "云端助手", "对话、管理快捷文本与创建小工具", version = "0.9.15")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.16")
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
@@ -38,8 +38,8 @@ class CloudAgentPlugin : KigPlugin {
     }
     override val contributions get() = PluginContributions(actions = if (this::runner.isInitialized && (runner.running || store.settings.pinHomeIcon))
         listOf(UiAction("open", "AI 助手", UiSlot.HEADER_END, PluginIcon.ROBOT2, busy = runner.running)) else emptyList(), settingsEntries = listOf(
-        SettingsEntry("assistant", "AI 助手", "chat", PluginIcon.ROBOT2, cardId = "assistant", cardTitle = "助手", summary = "对话与快捷文本管理"),
-        SettingsEntry("settings", "连接与对话", "settings", PluginIcon.SETTINGS, cardId = "assistant", cardTitle = "助手", summary = "服务、模型与密钥", order = 1)),
+        SettingsEntry("assistant", "AI 助手", "chat", PluginIcon.ROBOT2, cardId = "assistant", cardTitle = "助手", summary = "聊天与创作"),
+        SettingsEntry("settings", "助手设置", "settings", PluginIcon.SETTINGS, cardId = "assistant", cardTitle = "助手", summary = "服务、模型与密钥", order = 1)),
         automationActions = listOf("open"))
     override fun page(pageId: String, context: PluginContext) = agentPage(pageId, store, runner, secrets)
     override suspend fun execute(actionId: String, context: PluginContext): PluginOutcome {
@@ -69,7 +69,7 @@ class CloudAgentPlugin : KigPlugin {
                     val id = actionId.removePrefix("delete/")
                     check(!runner.isRunning(id)) { "请先停止此会话的回答" }
                     val conversation = requireNotNull(store.get(id)) { "会话不存在" }
-                    PluginOutcome.Confirm("删除会话？", "将删除“${conversation.title}”及其本地对话记录，此操作无法撤销。",
+                    PluginOutcome.Confirm("删除会话？", "将删除“${conversation.title}”的所有消息，无法恢复。",
                         PageAction("delete-confirm/$id", "删除", PluginIcon.NONE, symbol = "delete"))
                 }
                 actionId.startsWith("delete-confirm/") -> {

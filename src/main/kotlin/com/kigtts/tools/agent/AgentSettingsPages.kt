@@ -7,11 +7,11 @@ internal fun agentSettingsPage(id: String, store: AgentStore, secrets: AgentSecr
     val settings = store.settings
     return when (id) {
         "settings" -> PluginPage(id, "助手设置", listOf(
-            PageBlock.Group("模型服务", listOf(PageBlock.Actions(listOf(PageAction("connections", "供应商、密钥与模型管理", PluginIcon.SETTINGS))))),
+            PageBlock.Group("模型服务", listOf(PageBlock.Actions(listOf(PageAction("connections", "供应商与模型", PluginIcon.SETTINGS))))),
             PageBlock.Group("使用体验", listOf(
-                PageBlock.Toggle("任务通知", settings.taskNotifications, "task-notifications", "显示执行进度、完成结果与会话入口", PluginIcon.NONE),
-                PageBlock.Toggle("常驻主页图标", settings.pinHomeIcon, "pin-home-icon", "执行任务时自动显示进度，也可始终保留入口", PluginIcon.ROBOT2),
-                PageBlock.Toggle("显示思考过程", settings.showReasoning, "reasoning", "展开查看服务公开返回的思考内容", PluginIcon.TEXT),
+                PageBlock.Toggle("任务通知", settings.taskNotifications, "task-notifications", "查看任务进度和结果，点按通知返回会话", PluginIcon.NONE),
+                PageBlock.Toggle("常驻主页图标", settings.pinHomeIcon, "pin-home-icon", "任务结束后仍在主页显示助手按钮", PluginIcon.ROBOT2),
+                PageBlock.Toggle("显示思考过程", settings.showReasoning, "reasoning", "展开查看模型提供的思考过程", PluginIcon.TEXT),
                 PageBlock.Toggle("允许操作软件", settings.toolsEnabled, "tools", "在会话输入框上方切换审批模式", PluginIcon.SETTINGS)))
         ))
         "connections" -> PluginPage(id, "供应商管理", listOf(PageBlock.Actions(listOf(PageAction("add-provider", "添加自定义供应商", PluginIcon.ADD)))),
@@ -27,10 +27,10 @@ internal fun agentSettingsPage(id: String, store: AgentStore, secrets: AgentSecr
                 PageBlock.Input("密钥", if (secrets.exists(settings)) "已设置" else "未设置", "key", secret = true))),
             PageBlock.Group("模型", listOf(PageBlock.Actions(listOf(PageAction("models", "管理模型列表", PluginIcon.TEXT))))),
             PageBlock.Text("在会话输入框上方打开模型弹窗，选择本次会话的模型和思考强度。")) +
-                if (settings.provider in setOf(Provider.OPENCODE_ZEN, Provider.OPENCODE_GO)) listOf(PageBlock.Notice("当前支持 OpenCode 的 Chat Completions 模型；其它协议的模型保留在目录中，暂不出现在会话选择列表。")) else emptyList())
+                if (settings.provider in setOf(Provider.OPENCODE_ZEN, Provider.OPENCODE_GO)) listOf(PageBlock.Notice("会话中仅显示目前支持的 OpenCode 模型。其它模型仍保留在管理列表中。")) else emptyList())
         "dialogue-settings" -> PluginPage(id, "对话与主页入口", listOf(PageBlock.Group("对话", listOf(
-            PageBlock.Toggle("常驻主页图标", settings.pinHomeIcon, "pin-home-icon", "执行任务时自动显示进度，也可始终保留入口", PluginIcon.ROBOT2),
-            PageBlock.Toggle("显示思考过程", settings.showReasoning, "reasoning", "展开查看服务公开返回的思考内容", PluginIcon.TEXT),
+            PageBlock.Toggle("常驻主页图标", settings.pinHomeIcon, "pin-home-icon", "任务结束后仍在主页显示助手按钮", PluginIcon.ROBOT2),
+            PageBlock.Toggle("显示思考过程", settings.showReasoning, "reasoning", "展开查看模型提供的思考过程", PluginIcon.TEXT),
             PageBlock.Toggle("允许操作软件", settings.toolsEnabled, "tools", "批准模式和完全访问在会话输入框上方切换", PluginIcon.SETTINGS)))))
         else -> null
     }

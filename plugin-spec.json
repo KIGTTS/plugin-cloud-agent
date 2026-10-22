@@ -1,8 +1,8 @@
 {
   "id": "tools.cloud-agent",
-  "name": "云端助手",
-  "version": "0.9.15",
-  "versionCode": 19,
+  "name": "AI 助手",
+  "version": "0.9.16",
+  "versionCode": 20,
   "entryClass": "com.kigtts.tools.agent.CloudAgentPlugin",
   "apiVersion": 21,
   "minSdk": 26,
@@ -22,12 +22,12 @@
     "stickers-write"
   ],
   "permissionPurposes": {
-    "notifications": "显示你发起的AI任务进度、完成或待确认提醒，并提供返回对应会话和停止任务的按钮。",
-    "network": "连接用户配置的AI供应商获取模型、发送对话及用户选择的图片，按任务搜索网页和公开图片、下载图片及页面素材。",
-    "app-control": "按用户任务调整应用设置、提交字幕及调试用户授权的Lua插件。",
-    "quick-text-read": "读取用户指定的快捷文本、分组及页面文件以编辑和验收。",
-    "quick-text-write": "创建、编辑、导入导出用户授权的快捷文本与页面。",
-    "stickers-read": "读取用户指定的拍立得、贴纸或图片用于对话和制作。",
-    "stickers-write": "制作、整理用户授权的贴纸与拍立得。"
+    "app-control": "按你的要求调整软件设置、发送字幕，或调试已授权的 Lua 插件。",
+    "quick-text-read": "读取你选择的快捷文本、分组和网页文件，以便整理或编辑。",
+    "quick-text-write": "按你的要求创建、修改、导入和导出快捷文本及网页。",
+    "stickers-read": "读取你选择的照片和贴纸，用于对话或创作。",
+    "stickers-write": "按你的要求制作、修改和整理照片与贴纸。",
+    "notifications": "在任务执行、完成或等待确认时提醒你，并提供返回会话或停止任务的按钮。",
+    "network": "连接你设置的 AI 服务，发送对话和所选图片；按任务搜索资料、查找并下载图片及网页素材。"
   }
 }

@@ -47,7 +47,7 @@ internal class HttpsModelsTransport(private val beforeRequest: suspend () -> Uni
             when (connection.responseCode) {
                 200 -> Unit
                 401, 403 -> error("密钥无效或无模型列表权限，已保留原列表")
-                404, 405 -> error("此供应商未提供兼容的模型列表接口，请手动编辑列表")
+                404, 405 -> error("暂时无法自动获取此供应商的模型，请手动编辑列表")
                 else -> error("模型列表获取失败（${connection.responseCode}），已保留原列表")
             }
             val bytes = connection.inputStream.use { input -> java.io.ByteArrayOutputStream().use { output ->

@@ -11,7 +11,7 @@ internal fun agentPage(id: String, store: AgentStore, runner: AgentRunner, secre
                 PageAction("conversations", "历史会话", PluginIcon.NONE, symbol = "history"),
                 PageAction("new", "新会话", PluginIcon.ADD), PageAction("settings", "助手设置", PluginIcon.SETTINGS))))
             blocks += agentChat(store, runner)
-            PluginPage(id, conversation?.title ?: "云端助手", blocks)
+            PluginPage(id, conversation?.title ?: "AI 助手", blocks)
         }
         "conversations" -> PluginPage(id, "会话", listOf(PageBlock.Actions(listOf(PageAction("new", "新会话", PluginIcon.ADD)))),
             management = ManagementList("conversations", store.list().map { conversation ->
@@ -45,7 +45,7 @@ internal fun visibleMessages(messages: List<AgentMessage>, maximum: Int = 40 * 1
 }
 internal fun toolSummary(content: String): String = when {
     content.contains("CONFIRMATION_REQUIRED") || content.contains("\"pending\":true") || content.contains("\"requiresConfirmation\":true") -> "等待你审核操作"
-    content.contains("\"type\":\"prepared\"") -> "变更已准备"
+    content.contains("\"type\":\"prepared\"") -> "修改已准备好"
     content.contains("discarded_after_user_review") || content.contains("\"type\":\"discarded\"") -> "操作已取消"
     content.contains("OUTCOME_UNKNOWN") || content.contains("outcome_unknown") -> "操作状态待确认"
     content.contains("\"error\"") || content.contains("\"type\":\"failure\"") -> "操作未完成"

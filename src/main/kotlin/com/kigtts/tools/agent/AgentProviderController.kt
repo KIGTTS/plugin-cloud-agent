@@ -82,7 +82,7 @@ internal class AgentProviderController(private val store: AgentStore, private va
                         if (info != null) { put("reasoningEfforts", kotlinx.serialization.json.JsonArray(info.reasoningEfforts.map { kotlinx.serialization.json.JsonPrimitive(it) })); info.vision?.let { put("vision", kotlinx.serialization.json.JsonPrimitive(it)) } }
                     }) }
                 }.toString()
-                return PluginOutcome.TextInput("模型列表（逐行ID，或含reasoningEfforts的JSON数组）", "edit-models-save", text, multiline = true)
+                return PluginOutcome.TextInput("编辑模型列表（每行一个模型 ID，也可粘贴 JSON）", "edit-models-save", text, multiline = true)
             }
             action == "edit-models-save" -> {
                 val settings = pickerConnection(); val list = parseManualModels(value)
