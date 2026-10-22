@@ -1,0 +1,28 @@
+{
+  "id": "tools.cloud-agent",
+  "name": "云端助手",
+  "version": "0.9.13",
+  "versionCode": 17,
+  "entryClass": "com.kigtts.tools.agent.CloudAgentPlugin",
+  "apiVersion": 14,
+  "minSdk": 26,
+  "runtime": "android-dex",
+  "license": "MIT",
+  "capabilities": [
+    "ui",
+    "network",
+    "app-control",
+    "quick-text-read",
+    "quick-text-write",
+    "stickers-read",
+    "stickers-write"
+  ],
+  "permissionPurposes": {
+    "network": "连接用户配置的AI供应商获取模型、发送对话及用户选择的图片，按任务搜索网页和公开图片、下载图片及页面素材。",
+    "app-control": "按用户任务调整应用设置、提交字幕及调试用户授权的Lua插件。",
+    "quick-text-read": "读取用户指定的快捷文本、分组及页面文件以编辑和验收。",
+    "quick-text-write": "创建、编辑、导入导出用户授权的快捷文本与页面。",
+    "stickers-read": "读取用户指定的拍立得、贴纸或图片用于对话和制作。",
+    "stickers-write": "制作、整理用户授权的贴纸与拍立得。"
+  }
+}
