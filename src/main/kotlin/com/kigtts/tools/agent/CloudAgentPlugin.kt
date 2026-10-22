@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "云端助手", "对话、管理快捷文本与创建小工具", version = "0.9.14")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "云端助手", "对话、管理快捷文本与创建小工具", version = "0.9.15")
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets

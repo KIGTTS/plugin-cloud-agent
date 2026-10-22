@@ -1,14 +1,16 @@
 {
   "id": "tools.cloud-agent",
   "name": "云端助手",
-  "version": "0.9.14",
-  "versionCode": 18,
+  "version": "0.9.15",
+  "versionCode": 19,
   "entryClass": "com.kigtts.tools.agent.CloudAgentPlugin",
-  "apiVersion": 20,
+  "apiVersion": 21,
   "minSdk": 26,
   "runtime": "android-dex",
   "license": "MIT",
-  "icon": { "symbol": "robot_2" },
+  "icon": {
+    "symbol": "robot_2"
+  },
   "capabilities": [
     "ui",
     "network",

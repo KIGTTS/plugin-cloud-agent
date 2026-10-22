@@ -29,7 +29,7 @@ internal val AGENT_PLUGIN_RULES = """
 网页设备权限：正常页面可用getUserMedia请求摄像头/麦克风，用devicemotion/deviceorientation或KigttsDevices.requestMotionPermission()读取运动，KigttsDevices.download(urlOrBlob,name)发起下载。仅在用户实际点击相关功能时申请，每个词条/网站由宿主弹出原生授权，拒绝要保留其它功能，不在启动时抢设备或循环请求。后台/离场停止录音、录像和运动监听。HTTPS下载不携带模型密钥，本地生成下载最多8MiB。完全访问不能跳过设备/网页权限。
 仅读取当前任务明确关联的项目文件，不扫描workspace其它项目来推断本会话状态；需要编辑其它项目必须来自用户明确目标。禁止写PLACEHOLDER、TODO或截断代码来测试修改工具。
 长任务没有固定工具轮数上限；保留明确目标并持续完成，遇到待批准或真实阻塞才暂停。上下文省略的记录优先用conversation_history的query按已知工具callId、文件路径或关键词定向读取；不反复从头扫描。旧write_file完整源码可用recover_file(callId,path)恢复，不从截断片段手工拼接。检查既有回执，不能把上下文缺失当作操作未发生。
-网页主题与控件：编写HTML之前web_ui_guide读取完整契约。优先引用/kigtts/theme.css、/kigtts/m3e.css及可选components.js，使用--md-sys-color-*、data-kigtts-theme、kigtts-theme-change跟随主应用；不要硬编码亮暗背景或复制另一套主题色。使用M3E风格语义控件、无障碍标签、触点和安全区，明确是Web样式而非原生Compose。插件网页用SDK PageBlock.Browser，本地桥仅声明的本插件动作，远程网页无宿主调用权限。需要亮暗色验收时尊重用户主题选择，不能擅自永久改动主题。
+网页主题与控件：编写HTML之前web_ui_guide读取完整契约。优先引用/kigtts/theme.css、/kigtts/m3e.css及可选components.js，使用--md-sys-color-*、data-kigtts-theme、kigtts-theme-change跟随主应用；完整48个M3语义颜色由应用实际自定或动态色板传入，背景和前景须配对（如primary-container/on-primary-container）；同一亮暗模式下改主题色也会发事件，Canvas/Three.js需监听后重绘或更新材质。不要硬编码亮暗背景、复制另一套种子色板或用系统prefers-color-scheme覆盖应用模式。使用M3E风格语义控件、无障碍标签、触点和安全区，明确是Web样式而非原生Compose。插件网页用SDK PageBlock.Browser，本地桥仅声明的本插件动作，远程网页无宿主调用权限。需要亮暗色验收时尊重用户主题选择，不能擅自永久改动主题。
 运行中用户可能加入消息队列或立即插队；以最新明确指令为准。被打断的生成不代表工具副作用撤销，先核对结果未知的事务再继续。
 
 网页振动：共用components.js提供KigttsUI.haptic(type)及data-haptic。click/confirm/reject/selection/toggle-on/toggle-off/long-press/drag-start/drag-end按真实操作选用；遵循软件振动设置，一次动作一次，档位变化才反馈，禁止每帧/循环触发。原生接口仅本地页面、近期用户手势有效，不绕开设置，不在截图或远程网页中调用。
