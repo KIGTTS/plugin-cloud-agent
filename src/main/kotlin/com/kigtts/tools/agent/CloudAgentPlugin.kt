@@ -8,12 +8,13 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.16")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.17")
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
     private lateinit var runner: AgentRunner
     private lateinit var notifications: AgentTaskNotifications
+    private lateinit var taskBadges: AgentTaskBadges
     private lateinit var catalog: AgentModelCatalog
     private lateinit var providers: AgentProviderController
     private lateinit var reviews: AgentReviewController
@@ -28,7 +29,10 @@ class CloudAgentPlugin : KigPlugin {
             store.updateSettings { it.copy(access = AgentAccessMode.REQUEST_APPROVAL) }
         secrets = KeystoreAgentSecrets(environment.storage)
         notifications = AgentTaskNotifications(store, environment)
-        runner = ConcurrentAgentRunner(store, secrets, environment, ::changed, notifications::changed)
+        taskBadges = AgentTaskBadges(store, environment.storage)
+        runner = ConcurrentAgentRunner(store, secrets, environment, ::changed) { id, running ->
+            taskBadges.changed(id, running); notifications.changed(id, running)
+        }
         reviews = AgentReviewController(environment, store, runner)
         catalog = AgentModelCatalog(store, secrets, ::changed, HttpsModelsTransport { environment.requirePermission("network") })
         providers = AgentProviderController(store, secrets, runner, catalog)
@@ -36,18 +40,25 @@ class CloudAgentPlugin : KigPlugin {
         if (store.settings.access == AgentAccessMode.FULL && store.settings.toolsEnabled)
             store.list().mapNotNull { store.pendingFor(it.id) }.forEach { reviews.resume(it.conversationId) }
     }
-    override val contributions get() = PluginContributions(actions = if (this::runner.isInitialized && (runner.running || store.settings.pinHomeIcon))
-        listOf(UiAction("open", "AI 助手", UiSlot.HEADER_END, PluginIcon.ROBOT2, busy = runner.running)) else emptyList(), settingsEntries = listOf(
-        SettingsEntry("assistant", "AI 助手", "chat", PluginIcon.ROBOT2, cardId = "assistant", cardTitle = "助手", summary = "聊天与创作"),
+    override val contributions get(): PluginContributions {
+        val badge = if (::taskBadges.isInitialized) taskBadges.badge() else null
+        return PluginContributions(actions = if (this::runner.isInitialized && (runner.running || store.settings.pinHomeIcon || badge != null))
+        listOf(UiAction("open", "AI 助手", UiSlot.HEADER_END, PluginIcon.ROBOT2, busy = runner.running, badge = badge)) else emptyList(), settingsEntries = listOf(
+        SettingsEntry("assistant", "AI 助手", "chat", PluginIcon.ROBOT2, cardId = "assistant", cardTitle = "助手", summary = "聊天与创作", badge = badge),
         SettingsEntry("settings", "助手设置", "settings", PluginIcon.SETTINGS, cardId = "assistant", cardTitle = "助手", summary = "服务、模型与密钥", order = 1)),
         automationActions = listOf("open"))
+    }
     override fun page(pageId: String, context: PluginContext) = agentPage(pageId, store, runner, secrets)
     override suspend fun execute(actionId: String, context: PluginContext): PluginOutcome {
         val value = context.inputs["value"].orEmpty()
         try {
             providers.handle(actionId, context)?.let { changed(); return it }
             val result = when {
-                actionId == "open" -> { catalog.refresh(store.selected()?.let(store::connection) ?: store.settings.configuredConnection()); PluginOutcome.OpenPage("chat") }
+                actionId == "open" -> {
+                    taskBadges.attentionConversation()?.let(store::select)
+                    catalog.refresh(store.selected()?.let(store::connection) ?: store.settings.configuredConnection()); PluginOutcome.OpenPage("chat")
+                }
+                actionId.startsWith("chat-viewed/") -> { taskBadges.viewed(actionId.substringAfter('/')); PluginOutcome.RefreshUi }
                 actionId in setOf("settings", "conversations", "connections", "dialogue-settings", "connection-settings") -> PluginOutcome.OpenPage(actionId)
                 actionId == "chat-menu" -> PluginOutcome.Menu("会话", listOf(PageAction("settings", "助手设置", PluginIcon.SETTINGS)))
                 actionId == "new" -> {

@@ -11,7 +11,7 @@ internal fun agentPage(id: String, store: AgentStore, runner: AgentRunner, secre
                 PageAction("conversations", "历史会话", PluginIcon.NONE, symbol = "history"),
                 PageAction("new", "新会话", PluginIcon.ADD), PageAction("settings", "助手设置", PluginIcon.SETTINGS))))
             blocks += agentChat(store, runner)
-            PluginPage(id, conversation?.title ?: "AI 助手", blocks)
+            PluginPage(id, conversation?.title ?: "AI 助手", blocks, onEnterAction = conversation?.let { "chat-viewed/${it.id}" })
         }
         "conversations" -> PluginPage(id, "会话", listOf(PageBlock.Actions(listOf(PageAction("new", "新会话", PluginIcon.ADD)))),
             management = ManagementList("conversations", store.list().map { conversation ->
