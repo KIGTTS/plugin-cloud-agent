@@ -51,7 +51,7 @@ internal fun agentChat(store: AgentStore, runner: AgentRunner): PageBlock.Chat {
             thinking = message.role == "assistant" && message.state == MessageState.STREAMING && message.content.isBlank() && !message.reasoningDone, position = positions[message.id] ?: -1,
             hasReasoning = message.role == "assistant" && message.reasoning.isNotBlank(),
             options = message.options.mapIndexed { index, option ->
-                ChatOption("option/\${message.id}/$index", option.label, option.value, option.section)
+                ChatOption("option/${message.id}/$index", option.label, option.value, option.section)
             })
     }
     return PageBlock.Chat(messages, "send", "stop", runner.runningConversation == conversation?.id && runner.running,

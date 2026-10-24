@@ -42,5 +42,11 @@ class AgentPagesTest {
         assertTrue(rows.single { it.id == old.id }.actions.any { it.id == "export-conversation/${old.id}" })
         val settingsJson = PluginJson.encodeToString(agentPage("settings", store, runner, secrets))
         assertFalse(settingsJson.contains("import-cards")); assertFalse(settingsJson.contains("export-cards"))
+        val question = AgentMessage(id = "question-123", role = "assistant", content = "选择一种样式",
+            options = listOf(ChatOption("original", "简洁", "simple"), ChatOption("original", "明亮", "bright")))
+        store.message(conversation.id, question, persist = false)
+        val options = agentChat(store, runner).messages.single { it.id == question.id }.options
+        assertEquals(listOf("option/question-123/0", "option/question-123/1"), options.map { it.action })
+        assertEquals(listOf("simple", "bright"), options.map { it.value })
     }
 }
