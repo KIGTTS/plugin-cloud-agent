@@ -33,6 +33,19 @@ class AgentToolsTest {
         val result = AgentTools(environment(quick = quick)).execute(ToolCall("call", "quick_text", "{\"command\":{\"type\":\"commit\",\"token\":\"token\"}}"))
         assertTrue(result.pause); assertEquals("token", result.reviewToken)
     }
+    @Test fun askUserReturnsChoiceOptionsWithoutEnteringPermissionReview() = runTest {
+        val tools = AgentTools(environment())
+        val choices = buildJsonArray {
+            add(buildJsonObject { put("label", "预览"); put("value", "preview") })
+            add(buildJsonObject { put("label", "发布"); put("value", "publish") })
+        }
+        val result = tools.execute(ToolCall("call", "ask_user",
+            buildJsonObject { put("question", "选择模式"); put("options", choices.toString()) }.toString()))
+        assertTrue(result.pause)
+        assertEquals("选择模式", result.summary)
+        assertEquals(listOf("预览", "发布"), result.options.map { it.label })
+        assertFalse(tools.requiresApproval(ToolCall("call", "ask_user", "{}")))
+    }
     @Test fun fileToolsCannotReachSecretsOrOtherPluginDirectories() = runTest {
         val tools = AgentTools(environment())
         listOf("config/key-DEEPSEEK.bin", "workspace/../config/key-DEEPSEEK.bin", "D:/other", "../elsewhere").forEach { path ->
