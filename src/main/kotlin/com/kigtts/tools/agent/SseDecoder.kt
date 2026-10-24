@@ -52,6 +52,22 @@ class StreamAssembler(private val textLimit: Int = 1024 * 1024) {
         val root = PluginJson.parseToJsonElement(payload).jsonObject
         check(root["error"] == null) { "服务中断了回答，请稍后重试" }
         (root["usage"] as? JsonObject)?.let { usage = parseAgentUsage(it) }
+        when (root["type"]?.jsonPrimitive?.contentOrNull) {
+            "content_block_delta" -> {
+                val delta = root["delta"]?.jsonObject
+                text.append(delta?.get("text").stringOrEmpty())
+                require(text.length + reasoning.length <= textLimit)
+                return true
+            }
+            "message_delta" -> {
+                root["delta"]?.jsonObject?.get("stop_reason")?.jsonPrimitive?.contentOrNull?.let { finishReason = it }
+                return true
+            }
+            "message_stop", "response.completed" -> { ended = true; finishReason = finishReason ?: "stop"; return false }
+        }
+        if (root["type"]?.jsonPrimitive?.contentOrNull == "response.output_text.delta") {
+            text.append(root["delta"].stringOrEmpty()); require(text.length + reasoning.length <= textLimit); return true
+        }
         val choice = root["choices"]?.jsonArray?.firstOrNull { it.jsonObject["index"]?.jsonPrimitive?.intOrNull in listOf(null, 0) }?.jsonObject ?: return true
         choice["finish_reason"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content?.let { finishReason = it }
         val delta = choice["delta"]?.jsonObject ?: return true

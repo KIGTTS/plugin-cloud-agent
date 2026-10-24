@@ -2,10 +2,10 @@ package com.kigtts.tools.agent
 
 import com.kigtts.plugin.api.*
 
-internal fun agentChat(store: AgentStore, runner: AgentRunner): PageBlock.Chat {
+internal fun agentChat(store: AgentStore, runner: AgentRunner, secrets: AgentSecrets? = null): PageBlock.Chat {
     val conversation = store.selected()
     val settings = conversation?.let(store::connection) ?: store.settings
-    val profile = requireNotNull(settings.profiles[settings.provider])
+    val profile = settings.effectiveProfile()
     val pending = store.pending?.takeIf { it.conversationId == conversation?.id }
     val all = conversation?.messages.orEmpty()
     val before = conversation?.let { store.historyBefore(it.id) }
@@ -56,8 +56,8 @@ internal fun agentChat(store: AgentStore, runner: AgentRunner): PageBlock.Chat {
     }
     return PageBlock.Chat(messages, "send", "stop", runner.runningConversation == conversation?.id && runner.running,
         placeholder = "发送消息", conversationId = conversation?.id.orEmpty(), controls = listOf(
-            ChatControl("供应商", providerOptions(store, true).map { ChatOption(it.id, it.label) }, providerAction(settings, true), ChatControlKind.PROVIDER),
-            ChatControl("模型", modelOptions(store, settings), modelAction(settings, profile.model, true)),
+            ChatControl("供应商", providerOptions(store, true, secrets).map { ChatOption(it.id, it.label) }, providerAction(settings, true), ChatControlKind.PROVIDER),
+            ChatControl("选择模型", modelOptions(store, settings, secrets), modelAction(settings, profile.model, true)),
             ChatControl("权限", listOf(ChatOption("access/ask", "手动审核", "ask"), ChatOption("access/assist", "帮我批准", "assist"), ChatOption("access/full", "完全访问", "full")),
                 when (settings.access) { AgentAccessMode.FULL -> "access/full"; AgentAccessMode.ASSISTED -> "access/assist"; else -> "access/ask" }, ChatControlKind.ACCESS)) + reasoningControl(settings),
         approval = pending?.let { ChatApproval("请求批准", "resume", "discard-review", it.summary.take(4000),

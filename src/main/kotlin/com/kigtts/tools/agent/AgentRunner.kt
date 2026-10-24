@@ -23,10 +23,13 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
         check(!running) { "请先停止当前回答" }; check(store.pendingFor(conversationId) == null) { "请先完成或取消待审核操作" }
         require((text.isNotBlank() || store.get(conversationId)?.draftImages?.isNotEmpty() == true) && text.length <= 32 * 1024)
         val settings = store.connection(requireNotNull(store.get(conversationId)))
-        val profile = requireNotNull(settings.profiles[settings.provider]); completionEndpoint(profile.endpoint)
-        check(profile.model.isNotBlank()) { "请在连接设置中填写模型" }
+        val profile = settings.effectiveProfile(); apiEndpoint(profile)
+        // The picker only exposes refreshed catalog entries. Keep an already selected
+        // legacy/default model runnable until the first catalog refresh, so existing
+        // conversations and migrations do not become dead ends.
+        check(secrets.exists(settings) && profile.model.isNotBlank()) { "暂无可用模型，请先在供应商配置中填写 API 密钥并刷新模型列表" }
+        if (profile.models.isNotEmpty()) check(selectedModelIsAvailable(store, secrets, settings)) { "请选择可用模型" }
         check(openCodeChatModel(settings.provider, profile.model)) { "此 OpenCode 模型使用尚未支持的协议，请在会话弹窗选择兼容模型" }
-        check(secrets.exists(settings)) { "请先在连接设置中填写密钥" }
         val conversation = requireNotNull(store.get(conversationId))
         queuePaused = false
         store.save(conversation.copy(title = if (conversation.messages.isEmpty()) text.trim().take(36).ifBlank { "图片会话" } else conversation.title, draftImages = emptyList()))
@@ -76,7 +79,7 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
     private suspend fun respond(id: String, settings: AgentSettings) {
         try {
             val key = secrets.read(settings)
-            val endpoint = completionEndpoint(requireNotNull(settings.profiles[settings.provider]).endpoint)
+            val endpoint = apiEndpoint(settings.effectiveProfile())
             val publicReasoning = StringBuilder()
             val compactor = AgentCompactor(store, transport, endpoint, key, settings, tools.schemas)
             var overflowRetried = false

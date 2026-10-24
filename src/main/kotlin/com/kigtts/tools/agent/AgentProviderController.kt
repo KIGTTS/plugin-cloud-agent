@@ -25,11 +25,26 @@ internal class AgentProviderController(private val store: AgentStore, private va
                 return PluginOutcome.RefreshUi
             }
             action == "providers" -> return PluginOutcome.OpenPage("providers")
-            action == "add-provider" -> { require(store.settings.customProviders.size < 20); return PluginOutcome.TextInput("供应商名称", "add-provider-save") }
+            action == "add-provider" -> { require(store.settings.customProviders.size < 20); return PluginOutcome.OpenPage("provider-templates") }
+            action.startsWith("add-template/") -> {
+                require(store.settings.customProviders.size < 20)
+                val template = providerTemplates.firstOrNull { it.id == action.substringAfter('/') } ?: error("供应商模板不存在")
+                if (template.id == "custom") return PluginOutcome.TextInput("供应商名称", "add-provider-save")
+                val custom = CustomProvider(name = template.label, profile = ProviderProfile(template.endpoint, template.model, apiFormat = template.apiFormat, codexDeviceLogin = template.codexDeviceLogin))
+                store.updateSettings { it.copy(provider = Provider.CUSTOM, customProviderId = custom.id, customProviders = it.customProviders + custom) }
+                return if (template.codexDeviceLogin) PluginOutcome.TextInput("Codex 设备代码登录令牌", "codex-device-save/${custom.id}", secret = true)
+                else PluginOutcome.OpenPage("connection-settings")
+            }
             action == "add-provider-save" -> {
                 require(value.trim().length in 1..80 && store.settings.customProviders.size < 20)
                 val custom = CustomProvider(name = value.trim())
                 store.updateSettings { it.copy(provider = Provider.CUSTOM, customProviderId = custom.id, customProviders = it.customProviders + custom) }
+                return PluginOutcome.OpenPage("connection-settings")
+            }
+            action.startsWith("codex-device-save/") -> {
+                val id = action.substringAfter('/'); require(store.settings.customProviders.any { it.id == id })
+                require(value.trim().isNotBlank())
+                secrets.writeCustom(id, value.trim())
                 return PluginOutcome.OpenPage("connection-settings")
             }
             action.startsWith("edit-provider/") -> {
@@ -49,18 +64,23 @@ internal class AgentProviderController(private val store: AgentStore, private va
                 require(value.trim().length in 1..80); val id = requireNotNull(store.settings.customProviderId)
                 store.updateSettings { it.copy(customProviders = it.customProviders.map { custom -> if (custom.id == id) custom.copy(name = value.trim()) else custom }) }; return PluginOutcome.RefreshUi
             }
-            action in setOf("endpoint", "model", "key") -> {
+            action in setOf("endpoint", "key") -> {
                 val profile = store.settings.profile()
-                return PluginOutcome.TextInput(when (action) { "endpoint" -> "服务地址"; "model" -> "默认模型"; else -> "密钥" }, "save-$action", when (action) { "endpoint" -> profile.endpoint; "model" -> profile.model; else -> "" }, secret = action == "key")
+                return PluginOutcome.TextInput(if (action == "endpoint") "服务地址" else "密钥", "save-$action", if (action == "endpoint") profile.endpoint else "", secret = action == "key")
             }
-            action in setOf("save-endpoint", "save-model", "save-key") -> {
+            action in setOf("save-endpoint", "save-key") -> {
                 check(store.list().none { runner.isRunning(it.id) && store.connection(it).catalogKey() == store.settings.catalogKey() }) { "请先停止正在使用此连接的回答" }
                 when (action) {
                     "save-key" -> secrets.write(store.settings, value)
                     "save-endpoint" -> { completionEndpoint(value.trim()); store.changeProfile { it.copy(endpoint = value.trim(), modelsUpdatedAt = 0) } }
-                    else -> { require(value.trim().length in 1..256); store.changeProfile { it.copy(model = value.trim(), models = (it.models + value.trim()).distinct()) } }
                 }
-                if (action != "save-model") catalog.refresh(store.settings.configuredConnection(), true)
+                catalog.refresh(store.settings.configuredConnection(), true)
+                return PluginOutcome.RefreshUi
+            }
+            action.startsWith("api-format/") -> {
+                val format = runCatching { ApiFormat.valueOf(action.substringAfter('/')) }.getOrElse { error("API 格式不受支持") }
+                store.changeProfile { it.copy(apiFormat = format, modelsUpdatedAt = 0) }
+                catalog.refresh(store.settings.configuredConnection(), true)
                 return PluginOutcome.RefreshUi
             }
             action == "chat-models" || action == "models" -> {
@@ -69,25 +89,11 @@ internal class AgentProviderController(private val store: AgentStore, private va
             }
             action == "chat-models-refresh" -> { val conversation = store.selected() ?: store.create(); catalog.refresh(store.connection(conversation), true); return PluginOutcome.RefreshUi }
             action == "models-refresh" -> { catalog.refresh(pickerConnection(), true); return PluginOutcome.RefreshUi }
+            action == "models-manage" -> return PluginOutcome.OpenPage("connections")
             action == "models-next" -> { store.modelOffset += 40; return PluginOutcome.RefreshUi }
             action == "models-prev" -> { store.modelOffset = (store.modelOffset - 40).coerceAtLeast(0); return PluginOutcome.RefreshUi }
             action == "model-search" -> return PluginOutcome.TextInput("搜索模型", "model-search-save", store.modelFilter)
             action == "model-search-save" -> { store.modelFilter = value.take(160); store.modelOffset = 0; return PluginOutcome.RefreshUi }
-            action == "edit-models" -> {
-                val profile = pickerConnection().effectiveProfile()
-                val text = if (profile.modelInfo.isEmpty()) profile.models.joinToString("\n") else kotlinx.serialization.json.buildJsonArray {
-                    profile.models.forEach { id -> add(kotlinx.serialization.json.buildJsonObject {
-                        put("id", kotlinx.serialization.json.JsonPrimitive(id))
-                        val info = profile.modelInfo[id]
-                        if (info != null) { put("reasoningEfforts", kotlinx.serialization.json.JsonArray(info.reasoningEfforts.map { kotlinx.serialization.json.JsonPrimitive(it) })); info.vision?.let { put("vision", kotlinx.serialization.json.JsonPrimitive(it)) } }
-                    }) }
-                }.toString()
-                return PluginOutcome.TextInput("编辑模型列表（每行一个模型 ID，也可粘贴 JSON）", "edit-models-save", text, multiline = true)
-            }
-            action == "edit-models-save" -> {
-                val settings = pickerConnection(); val list = parseManualModels(value)
-                updateModelList(store, settings, list, if (value.trimStart().startsWith('[')) parseModelInfo(value) else emptyMap()); store.modelOffset = 0; return PluginOutcome.RefreshUi
-            }
             action.startsWith("effort/") -> {
                 val conversation = store.target(context) ?: store.create(); val connection = store.connection(conversation)
                 val effort = action.substringAfter('/'); val profile = connection.effectiveProfile()
@@ -99,8 +105,8 @@ internal class AgentProviderController(private val store: AgentStore, private va
                 val chat = action.startsWith("chat-")
                 val target = if (chat) store.target(context) else store.modelPickerConversation?.let(store::get)
                 var settings = target?.let(store::connection) ?: store.settings.configuredConnection()
-                val candidates = listOf(settings) + if (chat) Provider.entries.filter { it != Provider.CUSTOM }.map { store.settings.copy(provider = it, customProviderId = null).configuredConnection() } + store.settings.customProviders.map { store.settings.copy(provider = Provider.CUSTOM, customProviderId = it.id).configuredConnection() } else emptyList()
-                val match = candidates.firstNotNullOfOrNull { candidate -> (listOf(candidate.effectiveProfile().model) + candidate.effectiveProfile().models).firstOrNull { modelAction(candidate, it, chat) == action }?.let { candidate to it } } ?: error("模型列表已变化，请重新选择")
+                val candidates = if (chat) availableModels(store, secrets, settings) else availableModels(store, secrets, settings).filter { it.settings.catalogKey() == settings.catalogKey() }
+                val match = candidates.firstOrNull { modelAction(it.settings, it.id, chat) == action }?.let { it.settings to it.id } ?: error("模型列表已变化，请重新选择")
                 settings = match.first; val chosen = match.second
                 if (target != null) {
                     val same = store.connection(target).catalogKey() == settings.catalogKey() && target.model == chosen

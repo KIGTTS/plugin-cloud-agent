@@ -10,7 +10,7 @@ internal fun agentPage(id: String, store: AgentStore, runner: AgentRunner, secre
             val blocks = mutableListOf<PageBlock>(PageBlock.Actions(listOf(
                 PageAction("conversations", "历史会话", PluginIcon.NONE, symbol = "history"),
                 PageAction("new", "新会话", PluginIcon.ADD), PageAction("settings", "助手设置", PluginIcon.SETTINGS))))
-            blocks += agentChat(store, runner)
+            blocks += agentChat(store, runner, secrets)
             PluginPage(id, conversation?.title ?: "AI 助手", blocks, onEnterAction = conversation?.let { "chat-viewed/${it.id}" })
         }
         "conversations" -> PluginPage(id, "会话", listOf(PageBlock.Actions(listOf(PageAction("new", "新会话", PluginIcon.ADD)))),
@@ -25,8 +25,9 @@ internal fun agentPage(id: String, store: AgentStore, runner: AgentRunner, secre
                     actions = listOf(PageAction("export-conversation/${conversation.id}", "导出会话", PluginIcon.EXPORT),
                         PageAction("rename/${conversation.id}", "重命名", PluginIcon.EDIT), PageAction("delete/${conversation.id}", "删除", PluginIcon.CLOSE)))
             }, emptyText = "创建会话，开始聊天"))
-        "models" -> modelPickerPage(store)
+        "models" -> modelPickerPage(store, secrets)
         "providers" -> providersPage(store)
+        "provider-templates" -> providerTemplatesPage()
         else -> agentSettingsPage(id, store, secrets)
     }
 }

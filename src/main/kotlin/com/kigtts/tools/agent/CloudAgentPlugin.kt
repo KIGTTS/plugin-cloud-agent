@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.19")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.20")
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
@@ -163,16 +163,6 @@ class CloudAgentPlugin : KigPlugin {
                     if (actionId == "access/full" && target?.let(store::pendingFor)?.let { !runner.isRunning(it.conversationId) } == true) reviews.resume(target)
                     else PluginOutcome.RefreshUi
                 }
-                actionId == "chat-model" -> {
-                    val conversation = store.target(context) ?: store.create()
-                    val connection = store.connection(conversation)
-                    PluginOutcome.TextInput("模型名称", "save-chat-model", requireNotNull(connection.profiles[connection.provider]).model)
-                }
-                actionId == "save-chat-model" -> {
-                    require(value.trim().length in 1..160)
-                    val conversation = store.target(context) ?: store.create()
-                    store.modify(conversation.id) { it.copy(model = value.trim()) }; PluginOutcome.RefreshUi
-                }
                 actionId == "reasoning" -> { store.updateSettings { it.copy(showReasoning = !it.showReasoning) }; PluginOutcome.RefreshUi }
                 actionId == "pin-home-icon" -> { store.updateSettings { it.copy(pinHomeIcon = !it.pinHomeIcon) }; PluginOutcome.RefreshUi }
                 actionId == "task-notifications" -> {
@@ -201,7 +191,13 @@ class CloudAgentPlugin : KigPlugin {
             }
             changed(); return result
         } catch (error: IllegalArgumentException) { return PluginOutcome.Message(error.message?.take(200) ?: "请检查输入内容") }
-        catch (error: IllegalStateException) { return PluginOutcome.Message(error.message?.take(200) ?: "操作暂时无法完成") }
+        catch (error: IllegalStateException) {
+            return when (error.message) {
+                "请选择可用模型" -> PluginOutcome.Dialog("选择模型", "请选择可用模型")
+                "暂无可用模型，请先在供应商配置中填写 API 密钥并刷新模型列表" -> PluginOutcome.Dialog("暂无可用模型", "请先配置供应商的 API 密钥，再回到模型选择中刷新列表。")
+                else -> PluginOutcome.Message(error.message?.take(200) ?: "操作暂时无法完成")
+            }
+        }
         catch (_: java.io.IOException) { return PluginOutcome.Message("文件暂时无法保存，请稍后重试") }
     }
     private suspend fun prepared(reply: QuickTextReply): PluginOutcome {

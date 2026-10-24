@@ -24,12 +24,16 @@ class HttpsChatTransport(private val beforeRequest: suspend () -> Unit = {}) : C
         try {
             connection.requestMethod = "POST"; connection.instanceFollowRedirects = false
             connection.connectTimeout = 20_000; connection.readTimeout = 45_000; connection.doOutput = true
-            connection.setRequestProperty("Authorization", "Bearer $apiKey")
+            val format = request["_kigtts_api_format"]?.jsonPrimitive?.contentOrNull?.let { runCatching { ApiFormat.valueOf(it) }.getOrNull() } ?: ApiFormat.CHAT_COMPLETIONS
+            if (format == ApiFormat.ANTHROPIC_MESSAGES) {
+                connection.setRequestProperty("x-api-key", apiKey)
+                connection.setRequestProperty("anthropic-version", "2023-06-01")
+            } else connection.setRequestProperty("Authorization", "Bearer $apiKey")
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "text/event-stream")
             connection.setRequestProperty("User-Agent", "KIGTTSNEXT-Agent/0.9.6")
             if (URL(endpoint).host == "opencode.ai") request["_kigtts_session"]?.jsonPrimitive?.contentOrNull?.let { connection.setRequestProperty("x-opencode-session", it) }
-            val bytes = JsonObject(request.filterKeys { !it.startsWith("_kigtts_") }).toString().toByteArray(Charsets.UTF_8)
+            val bytes = adaptRequest(request, format).toString().toByteArray(Charsets.UTF_8)
             require(bytes.size <= 10 * 1024 * 1024) { "会话过长，请新建会话" }
             connection.setFixedLengthStreamingMode(bytes.size)
             connection.outputStream.use { it.write(bytes) }
@@ -61,8 +65,9 @@ class HttpsChatTransport(private val beforeRequest: suspend () -> Unit = {}) : C
 }
 
 internal fun chatRequest(settings: AgentSettings, conversation: Conversation, tools: JsonArray, imageData: (AgentImage) -> String = { error("没有图片读取能力") }): JsonObject = buildJsonObject {
-    val profile = requireNotNull(settings.profiles[settings.provider]); require(profile.model.isNotBlank()) { "请先填写模型名称" }
+    val profile = settings.effectiveProfile(); require(profile.model.isNotBlank()) { "请选择可用模型" }
     put("model", profile.model); put("stream", true)
+    put("_kigtts_api_format", profile.apiFormat.name)
     put("_kigtts_session", conversation.id)
     profile.effort?.takeIf { it in profile.modelInfo[profile.model]?.reasoningEfforts.orEmpty() }?.let { put("reasoning_effort", it) }
     put("messages", buildJsonArray {
@@ -84,6 +89,35 @@ internal fun chatRequest(settings: AgentSettings, conversation: Conversation, to
     if (settings.toolsEnabled) { put("tools", tools); put("tool_choice", "auto") }
     // Keep the provider's default inference mode. Displaying reasoning is an independent UI preference.
     // This also handles models (Kimi K3/K2.7) which reject a generic `thinking` option.
+}
+
+private fun adaptRequest(source: JsonObject, format: ApiFormat): JsonObject {
+    val clean = source.filterKeys { !it.startsWith("_kigtts_") }.toMutableMap()
+    when (format) {
+        ApiFormat.CHAT_COMPLETIONS -> Unit
+        ApiFormat.RESPONSES -> {
+            clean["input"] = clean.remove("messages") ?: JsonArray(emptyList())
+        }
+        ApiFormat.ANTHROPIC_MESSAGES -> {
+            val messages = clean["messages"]?.jsonArray.orEmpty()
+            val system = messages.firstOrNull()?.jsonObject?.takeIf { it["role"]?.jsonPrimitive?.content == "system" }?.get("content")
+            if (system != null) clean["system"] = system
+            clean["messages"] = JsonArray(messages.dropWhile { it.jsonObject["role"]?.jsonPrimitive?.content == "system" }.map { message ->
+                val obj = message.jsonObject.toMutableMap()
+                obj.remove("tool_calls"); obj.remove("tool_call_id"); JsonObject(obj)
+            })
+            clean["max_tokens"] = clean["max_tokens"] ?: JsonPrimitive(4096)
+            clean.remove("tool_choice")
+            clean["tools"] = JsonArray(clean["tools"]?.jsonArray.orEmpty().map { item ->
+                val obj = item.jsonObject; val fn = obj["function"]?.jsonObject
+                if (fn == null) item else buildJsonObject {
+                    put("name", fn["name"] ?: JsonPrimitive("tool")); put("description", fn["description"] ?: JsonPrimitive(""));
+                    put("input_schema", fn["parameters"] ?: buildJsonObject {})
+                }
+            })
+        }
+    }
+    return JsonObject(clean)
 }
 internal fun AgentMessage.toWire(imageData: (AgentImage) -> String = { error("没有图片读取能力") }, recentImages: Set<String> = images.map { it.path }.toSet()): JsonObject = buildJsonObject {
     put("role", role)

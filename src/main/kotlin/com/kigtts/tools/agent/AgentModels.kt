@@ -5,6 +5,11 @@ import kotlinx.serialization.Serializable
 import java.net.URI
 import java.util.UUID
 
+@Serializable enum class ApiFormat(val label: String) {
+    ANTHROPIC_MESSAGES("Anthropic Messages (/v1/messages)"),
+    CHAT_COMPLETIONS("Chat Completions (/chat/completions)"),
+    RESPONSES("Responses (/responses)")
+}
 @Serializable enum class Provider(val label: String, val endpoint: String, val model: String) {
     DEEPSEEK("DeepSeek", "https://api.deepseek.com", "deepseek-flash"),
     GLM("GLM", "https://open.bigmodel.cn/api/paas/v4", "glm-5.3"),
@@ -14,12 +19,13 @@ import java.util.UUID
     DASHSCOPE("阿里云百炼", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
     ARK("火山方舟", "https://ark.cn-beijing.volces.com/api/v3", ""),
     MINIMAX("MiniMax", "https://api.minimaxi.com/v1", ""),
+    OPENAI("OpenAI", "https://api.openai.com/v1", "gpt-4.1-mini"),
     OPENCODE_ZEN("OpenCode Zen", "https://opencode.ai/inference/openai/v1", "glm-5.3-flash-free"),
     OPENCODE_GO("OpenCode Go", "https://opencode.ai/inference/go/openai/v1", "glm-5.3-flash"),
     CUSTOM("自定义（兼容配置）", "", ""),
 }
 @Serializable data class ProviderProfile(val endpoint: String, val model: String, val models: List<String> = emptyList(), val modelsUpdatedAt: Long = 0, val modelInfo: Map<String, ModelInfo> = emptyMap(), val effort: String? = null,
-    val rememberedEfforts: Map<String, String> = emptyMap())
+    val rememberedEfforts: Map<String, String> = emptyMap(), val apiFormat: ApiFormat = ApiFormat.CHAT_COMPLETIONS, val codexDeviceLogin: Boolean = false)
 @Serializable data class ModelInfo(val reasoningEfforts: List<String> = emptyList(), val vision: Boolean? = null, val contextTokens: Int? = null)
 @Serializable data class CustomProvider(val id: String = UUID.randomUUID().toString(), val name: String = "自定义供应商", val profile: ProviderProfile = ProviderProfile("", ""))
 @Serializable data class AgentSettings(val provider: Provider = Provider.DEEPSEEK,
@@ -54,6 +60,16 @@ internal fun completionEndpoint(base: String): String {
     }
     return uri.toASCIIString().trimEnd('/').let { if (it.endsWith("/chat/completions")) it else "$it/chat/completions" }
 }
+internal fun apiEndpoint(profile: ProviderProfile): String {
+    val base = profile.endpoint.trim().trimEnd('/')
+    require(base.startsWith("https://")) { "服务地址需要使用 HTTPS" }
+    val suffix = when (profile.apiFormat) {
+        ApiFormat.ANTHROPIC_MESSAGES -> "/messages"
+        ApiFormat.CHAT_COMPLETIONS -> "/chat/completions"
+        ApiFormat.RESPONSES -> "/responses"
+    }
+    return if (base.endsWith(suffix)) base else base + suffix
+}
 
 internal fun AgentSettings.profile(): ProviderProfile =
     if (provider == Provider.CUSTOM && customProviderId != null) customProviders.firstOrNull { it.id == customProviderId }?.profile ?: ProviderProfile("", "")
@@ -66,10 +82,13 @@ internal fun AgentStore.connection(conversation: Conversation): AgentSettings {
     val chosen = settings.copy(provider = provider, customProviderId = customId)
     val profile = chosen.profile()
     val model = conversation.model ?: profile.model
-    return chosen.copy(profiles = chosen.profiles + (provider to profile.copy(model = model,
-        effort = (conversation.reasoningEffort ?: profile.rememberedEfforts[model] ?: profile.effort)?.takeUnless { it == "auto" })))
+    val bound = profile.copy(model = model,
+        effort = (conversation.reasoningEffort ?: profile.rememberedEfforts[model] ?: profile.effort)?.takeUnless { it == "auto" })
+    return if (provider == Provider.CUSTOM && customId != null) {
+        chosen.copy(customProviders = chosen.customProviders.map { if (it.id == customId) it.copy(profile = bound) else it })
+    } else chosen.copy(profiles = chosen.profiles + (provider to bound))
 }
-internal fun AgentSettings.effectiveProfile(): ProviderProfile = requireNotNull(profiles[provider])
+internal fun AgentSettings.effectiveProfile(): ProviderProfile = profile()
 internal fun AgentStore.target(context: com.kigtts.plugin.api.PluginContext): Conversation? {
     val id = context.inputs["_chatConversation"]?.takeIf(String::isNotBlank) ?: return selected()
     return requireNotNull(get(id)) { "此会话已删除，请重新打开会话" }
