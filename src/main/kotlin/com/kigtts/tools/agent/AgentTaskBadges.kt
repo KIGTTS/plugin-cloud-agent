@@ -22,7 +22,11 @@ internal class AgentTaskBadges(private val store: AgentStore, storage: PluginSto
         save()
     }
 
-    @Synchronized fun viewed(id: String) { if (unread.remove(id) != null) save() }
+    @Synchronized fun viewed(id: String) {
+        // A pending approval is actionable; keep its yellow marker until the review is resolved.
+        if (store.pendingFor(id) != null) return
+        if (unread.remove(id) != null) save()
+    }
 
     @Synchronized fun badge(): PluginBadge? {
         val ids = store.list().map { it.id }.toSet()

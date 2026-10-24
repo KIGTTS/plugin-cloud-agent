@@ -1,5 +1,6 @@
 package com.kigtts.tools.agent
 
+import com.kigtts.plugin.api.ChatOption
 import kotlinx.serialization.Serializable
 import java.net.URI
 import java.util.UUID
@@ -33,7 +34,7 @@ import java.util.UUID
     val content: String = "", val reasoning: String = "", val calls: List<ToolCall> = emptyList(),
     val toolCallId: String? = null, val state: MessageState = MessageState.COMPLETE,
     val summary: String = "", val images: List<AgentImage> = emptyList(), val visualInput: Boolean = false, val reasoningDone: Boolean = false,
-    val usage: AgentUsage? = null)
+    val usage: AgentUsage? = null, val options: List<ChatOption> = emptyList())
 @Serializable data class AgentImage(val path: String, val mime: String = "image/jpeg", val description: String = "图片")
 @Serializable data class AgentQueuedMessage(val id: String = UUID.randomUUID().toString(), val text: String,
     val images: List<AgentImage> = emptyList(), val createdAt: Long = System.currentTimeMillis(), val priority: Boolean = false)

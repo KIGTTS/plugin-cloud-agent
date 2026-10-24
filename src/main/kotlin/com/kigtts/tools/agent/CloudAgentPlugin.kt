@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.17")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.18")
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
@@ -59,6 +59,16 @@ class CloudAgentPlugin : KigPlugin {
                     catalog.refresh(store.selected()?.let(store::connection) ?: store.settings.configuredConnection()); PluginOutcome.OpenPage("chat")
                 }
                 actionId.startsWith("chat-viewed/") -> { taskBadges.viewed(actionId.substringAfter('/')); PluginOutcome.RefreshUi }
+                actionId.startsWith("option/") -> {
+                    val parts = actionId.removePrefix("option/").split('/')
+                    val conversation = store.target(context) ?: return PluginOutcome.RefreshUi
+                    val messageId = parts.getOrNull(0).orEmpty()
+                    val index = parts.getOrNull(1)?.toIntOrNull() ?: return PluginOutcome.RefreshUi
+                    val option = conversation.messages.firstOrNull { it.id == messageId }?.options?.getOrNull(index)
+                    requireNotNull(option) { "选项已失效，请重新生成问题" }
+                    runner.send(conversation.id, option.value.ifBlank { option.label })
+                    PluginOutcome.RefreshUi
+                }
                 actionId in setOf("settings", "conversations", "connections", "dialogue-settings", "connection-settings") -> PluginOutcome.OpenPage(actionId)
                 actionId == "chat-menu" -> PluginOutcome.Menu("会话", listOf(PageAction("settings", "助手设置", PluginIcon.SETTINGS)))
                 actionId == "new" -> {

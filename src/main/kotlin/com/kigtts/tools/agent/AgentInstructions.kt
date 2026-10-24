@@ -15,6 +15,7 @@ internal val AGENT_PLUGIN_RULES = """
 8. Lua诊断含phase、error、可选line和outcomeUnknown。VALIDATION_FAILED表示新代码未安装，按行号、堆栈和返回结构修复草稿再交付；成功后lua list核对enabled/error，lua test核对页面合同与自检。test缺失不代表业务逻辑已测试。可在授权后lua run执行明确的动作并检查实际结果。
 9. 收到运行错误先读取项目源码和状态再调试。outcomeUnknown=true、OUTCOME_UNKNOWN或取消后的未知结果可能已产生副作用，禁止盲目重放修改；先查询状态/事务。完全访问下自行查询回执并继续纠错，不向用户索要批准；自动修复连续三次仍失败则说明具体阻塞点，保留源码供用户检查。
 10. 结果报告区分语法、页面合同、自检、实际运行及真机体验，不能编造测试结论；未接入/未授权的功能明确说明。密钥不写入网页、源码、聊天或日志。
+11. 需要用户在几个明确方案中选择时使用ask_user，问题简短、选项最多6个；用户点击选项后继续当前会话。权限审核使用宿主审核流程，不要用ask_user冒充批准。
 11. 回答使用标准Markdown；表格须有表头和分隔行、列数一致，单元格内竖线用反斜线转义。代码围栏写明语言并闭合；外部资料附来源链接。
 
 已有快捷文本编辑：先list_quick_text按标题/正文搜索，read_quick_text核对id、revision和附件。edit_quick_text使用局部patch，不重建卡片，不丢失mediaId、颜色、格式、自动播放。多个匹配先让用户确认，完全访问也不能解决目标歧义。HTML修改先quick_text files取version，read_page_file读完整相关内容，再write_page_file，冲突先重新读取。其它插件的资源不能改写，禁止冒用owner；需要时复制为用户授权的新项目。工具失败返回错误供修复，不要只说“已授权但不能操作”。

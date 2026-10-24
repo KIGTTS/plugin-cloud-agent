@@ -139,6 +139,10 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
                         }).forAccess(store.settings.access)
                         store.message(id, AgentMessage(role = "tool", content = reply.content, toolCallId = call.id)); changed()
                         batchImages += reply.images
+                        if (reply.options.isNotEmpty()) {
+                            store.message(id, AgentMessage(role = "assistant", content = reply.summary.orEmpty(), options = reply.options))
+                            attachBatchImages(); changed(); return
+                        }
                         if (reply.reconcile) {
                             // Let the model inspect receipts before attempting dependent calls from this batch.
                             message.calls.drop(index + 1).forEach { deferred -> store.message(id, AgentMessage(role = "tool",
