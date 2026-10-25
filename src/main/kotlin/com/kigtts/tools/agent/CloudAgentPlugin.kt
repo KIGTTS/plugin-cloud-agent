@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.20")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.21")
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
@@ -37,6 +37,7 @@ class CloudAgentPlugin : KigPlugin {
         catalog = AgentModelCatalog(store, secrets, ::changed, HttpsModelsTransport { environment.requirePermission("network") })
         providers = AgentProviderController(store, secrets, runner, catalog)
         catalog.refresh(store.settings.configuredConnection())
+        if (store.settings.overlayShortcut) runCatching { registerAgentOverlay(environment, false) }
         if (store.settings.access == AgentAccessMode.FULL && store.settings.toolsEnabled)
             store.list().mapNotNull { store.pendingFor(it.id) }.forEach { reviews.resume(it.conversationId) }
     }
@@ -54,6 +55,11 @@ class CloudAgentPlugin : KigPlugin {
         try {
             providers.handle(actionId, context)?.let { changed(); return it }
             val result = when {
+                actionId == "overlay-add" -> {
+                    if (registerAgentOverlay(environment, true)) {
+                        store.updateSettings { it.copy(overlayShortcut = true) }; PluginOutcome.RefreshUi
+                    } else PluginOutcome.Message("请允许悬浮窗权限后重试")
+                }
                 actionId == "open" -> {
                     taskBadges.attentionConversation()?.let(store::select)
                     catalog.refresh(store.selected()?.let(store::connection) ?: store.settings.configuredConnection()); PluginOutcome.OpenPage("chat")

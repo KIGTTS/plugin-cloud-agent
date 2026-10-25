@@ -6,14 +6,15 @@ import kotlinx.serialization.json.*
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
-internal fun modelsEndpoint(base: String) = openCodeCatalogEndpoint(base) ?: (completionEndpoint(base).removeSuffix("/chat/completions") + "/models")
+internal fun modelsEndpoint(base: String) = openCodeCatalogEndpoint(base) ?: (completionEndpoint(base).removeSuffix("/chat/completions")
+    .removeSuffix("/chat/completions").removeSuffix("/responses").removeSuffix("/messages") + "/models")
 internal fun parseModelCatalog(text: String): List<String> {
     require(text.toByteArray().size <= 2 * 1024 * 1024) { "模型列表过大" }
     val value = PluginJson.parseToJsonElement(text)
-    val array = if (value is JsonArray) value else value.jsonObject.let { it["data"] as? JsonArray ?: it["models"] as? JsonArray ?: (it["data"] as? JsonObject)?.get("models") as? JsonArray } ?: error("服务没有返回模型列表，可手动填写")
+    val array = if (value is JsonArray) value else value.jsonObject.let { it["data"] as? JsonArray ?: it["models"] as? JsonArray ?: (it["data"] as? JsonObject)?.get("models") as? JsonArray } ?: error("服务没有返回模型列表，请检查服务地址和密钥")
     val models = array.mapNotNull { item -> (item as? JsonPrimitive)?.contentOrNull ?: (item as? JsonObject)?.get("id")?.jsonPrimitive?.contentOrNull }
         .filter { it.length in 1..256 && it.none(Char::isISOControl) }.distinct().sorted().take(1000)
-    require(models.isNotEmpty()) { "服务没有返回可用模型，可手动填写" }; return models
+    require(models.isNotEmpty()) { "服务没有返回可用模型，请检查账户的模型权限" }; return models
 }
 internal fun parseManualModels(value: String): List<String> {
     val items = if (value.trimStart().startsWith('[')) PluginJson.parseToJsonElement(value).jsonArray.map { if (it is JsonObject) it.getValue("id").jsonPrimitive.content else it.jsonPrimitive.content } else value.lines().map(String::trim).filter(String::isNotBlank)
@@ -43,11 +44,12 @@ internal class HttpsModelsTransport(private val beforeRequest: suspend () -> Uni
         try {
             connection.requestMethod = "GET"; connection.instanceFollowRedirects = false; connection.connectTimeout = 10_000; connection.readTimeout = 10_000
             connection.setRequestProperty("Authorization", "Bearer $key"); connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("x-api-key", key); connection.setRequestProperty("anthropic-version", "2023-06-01")
             connection.setRequestProperty("User-Agent", "KIGTTSNEXT-Agent/0.9.5")
             when (connection.responseCode) {
                 200 -> Unit
                 401, 403 -> error("密钥无效或无模型列表权限，已保留原列表")
-                404, 405 -> error("暂时无法自动获取此供应商的模型，请手动编辑列表")
+                404, 405 -> error("服务地址不支持获取模型列表，请检查地址")
                 else -> error("模型列表获取失败（${connection.responseCode}），已保留原列表")
             }
             val bytes = connection.inputStream.use { input -> java.io.ByteArrayOutputStream().use { output ->

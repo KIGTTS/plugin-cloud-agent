@@ -57,6 +57,31 @@ class AgentModelsDownloadsTest {
         assertEquals("", store.settings.profile().endpoint)
     }
     private fun AgentStore.storageForTest() = PluginStorage(temp.root)
+    @Test fun mediaDownloadAcceptsDirectAudioAndRejectsHtmlAndOversizedResponsesWithoutLeavingFiles() = runBlocking {
+        val env = object : PluginEnvironment {
+            override val storage = PluginStorage(temp.root); override val assets = temp.root
+            override val appBroker = object : AppBroker { override suspend fun request(command: AppCommand): AppReply = AppReply.Data(buildJsonObject { put("allowed", true) }) }
+            override suspend fun download(url: String, relativePath: String, sha256: String?): File = error("unused")
+        }
+        var mime = "audio/wav"; var bytes = "RIFFtestWAVE".toByteArray(); var length = bytes.size.toLong()
+        val tool = AgentDownload(env, { url -> object : HttpsURLConnection(url) {
+            override fun getCipherSuite() = "test"; override fun getLocalCertificates(): Array<java.security.cert.Certificate>? = null
+            override fun getServerCertificates(): Array<java.security.cert.Certificate> = emptyArray()
+            override fun connect() {}; override fun disconnect() {}; override fun usingProxy() = false
+            override fun getResponseCode() = 200; override fun getContentLengthLong() = length
+            override fun getContentType() = mime; override fun getInputStream() = bytes.inputStream()
+        } }, { URI(it) })
+        tool.download("https://example.com/audio", "workspace/tone.wav", media = true)
+        assertArrayEquals(bytes, env.storage.file("workspace/tone.wav").readBytes())
+        mime = "text/html"
+        assertTrue(runCatching { tool.download("https://example.com/page", "workspace/page.wav", media = true) }.isFailure)
+        mime = "application/octet-stream"; bytes = "  <!doctype html><html>login</html>".toByteArray(); length = bytes.size.toLong()
+        assertTrue(runCatching { tool.download("https://example.com/page", "workspace/fake.mp4", media = true) }.isFailure)
+        mime = "video/mp4"; length = AgentDownload.MEDIA_LIMIT + 1
+        assertTrue(runCatching { tool.download("https://example.com/big", "workspace/big.mp4", media = true) }.isFailure)
+        listOf("page.wav", "fake.mp4", "big.mp4").forEach { assertFalse(env.storage.file("workspace/$it").exists()) }
+        assertTrue(env.storage.temporary.listFiles().orEmpty().none { it.extension == "part" })
+    }
     @Test fun downloadReturnsActualResourceHashAndDoesNotOverwriteOrSaveBadChecksum() = runBlocking {
         val commands = mutableListOf<AppCommand>(); val bytes = byteArrayOf(1, 2, 3, 4)
         val env = object : PluginEnvironment {

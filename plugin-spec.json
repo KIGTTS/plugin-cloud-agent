@@ -1,8 +1,8 @@
 {
   "id": "tools.cloud-agent",
   "name": "AI 助手",
-  "version": "0.9.20",
-  "versionCode": 24,
+  "version": "0.9.21",
+  "versionCode": 25,
   "entryClass": "com.kigtts.tools.agent.CloudAgentPlugin",
   "apiVersion": 26,
   "minSdk": 26,
@@ -15,6 +15,7 @@
     "ui",
     "network",
     "notifications",
+    "overlay",
     "app-control",
     "quick-text-read",
     "quick-text-write",
@@ -27,6 +28,7 @@
     "quick-text-write": "按你的要求创建、修改、导入和导出快捷文本及网页。",
     "stickers-read": "读取你选择的照片和贴纸，用于对话或创作。",
     "stickers-write": "按你的要求制作、修改和整理照片与贴纸。",
+    "overlay": "添加你确认的 AI 助手悬浮入口，并显示任务提醒。",
     "notifications": "在任务执行、完成或等待确认时提醒你，并提供返回会话或停止任务的按钮。",
     "network": "连接你设置的 AI 服务，发送对话和所选图片；按任务搜索资料、查找并下载图片及网页素材。"
   }

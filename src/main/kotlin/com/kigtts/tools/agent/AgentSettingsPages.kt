@@ -8,6 +8,7 @@ internal fun agentSettingsPage(id: String, store: AgentStore, secrets: AgentSecr
     return when (id) {
         "settings" -> PluginPage(id, "助手设置", listOf(
             PageBlock.Group("模型服务", listOf(PageBlock.Actions(listOf(PageAction("connections", "供应商与模型", PluginIcon.SETTINGS))))),
+            PageBlock.Group("快捷入口", listOf(PageBlock.Actions(listOf(PageAction("overlay-add", "添加到悬浮窗", PluginIcon.NONE, symbol = "bubble_chart"))))),
             PageBlock.Group("使用体验", listOf(
                 PageBlock.Toggle("任务通知", settings.taskNotifications, "task-notifications", "查看任务进度和结果，点按通知返回会话", PluginIcon.NONE),
                 PageBlock.Toggle("常驻主页图标", settings.pinHomeIcon, "pin-home-icon", "任务结束后仍在主页显示助手按钮", PluginIcon.ROBOT2),
@@ -29,8 +30,10 @@ internal fun agentSettingsPage(id: String, store: AgentStore, secrets: AgentSecr
         "connection-settings" -> PluginPage(id, settings.providerLabel(), listOf(
             PageBlock.Group("连接", (if (settings.customProviderId != null) listOf(PageBlock.Input("名称", settings.providerLabel(), "provider-name", icon = PluginIcon.NONE)) else emptyList()) + listOf(
                 PageBlock.Input("服务地址", settings.profile().endpoint, "endpoint"),
-                PageBlock.Input("密钥", if (secrets.exists(settings)) "已设置" else "未设置", "key", secret = true))),
-            PageBlock.Group("模型", listOf(PageBlock.Choice("API 格式", ApiFormat.entries.map { PageAction("api-format/${it.name}", it.label) }, settings.profile().apiFormat.name, PluginIcon.SETTINGS),
+                PageBlock.Input("密钥", if (secrets.exists(settings)) "••••••••" else "", "key", secret = true))),
+            PageBlock.Group("模型", listOf(PageBlock.Choice("API 格式", ApiFormat.entries.map { PageAction("api-format/${it.name}", when (it) {
+                ApiFormat.ANTHROPIC_MESSAGES -> "Messages"; ApiFormat.CHAT_COMPLETIONS -> "Chat Completions"; ApiFormat.RESPONSES -> "Responses"
+            }) }, "api-format/${settings.profile().apiFormat.name}", PluginIcon.SETTINGS),
                 PageBlock.Actions(listOf(PageAction("models", "管理模型", PluginIcon.NONE, symbol = "tune"))))),
             PageBlock.Text("在会话输入框上方打开模型弹窗，选择本次会话的模型和思考强度。")) +
                 if (settings.provider in setOf(Provider.OPENCODE_ZEN, Provider.OPENCODE_GO)) listOf(PageBlock.Notice("会话中仅显示目前支持的 OpenCode 模型。其它模型仍保留在管理列表中。")) else emptyList())

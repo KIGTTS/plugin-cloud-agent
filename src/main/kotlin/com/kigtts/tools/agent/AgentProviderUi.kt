@@ -35,8 +35,10 @@ internal fun reasoningControl(settings: AgentSettings): List<ChatControl> {
 }
 internal fun modelPickerPage(store: AgentStore, secrets: AgentSecrets? = null): PluginPage {
     val settings = store.modelPickerConversation?.let(store::get)?.let(store::connection) ?: store.settings.configuredConnection()
-    val models = if (secrets != null && store.modelPickerConversation != null) {
-        availableModels(store, secrets, settings).map { it.settings to it.id }
+    val models = if (secrets != null) {
+        availableModels(store, secrets, settings).filter {
+            store.modelPickerConversation != null || it.settings.catalogKey() == settings.catalogKey()
+        }.map { it.settings to it.id }
     } else {
         settings.effectiveProfile().models.map { settings to it }
     }.filter { it.second.contains(store.modelFilter, true) }.distinctBy { it.first.catalogKey() + ":" + it.second }

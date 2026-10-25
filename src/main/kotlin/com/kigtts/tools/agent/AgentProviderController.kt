@@ -30,14 +30,14 @@ internal class AgentProviderController(private val store: AgentStore, private va
                 require(store.settings.customProviders.size < 20)
                 val template = providerTemplates.firstOrNull { it.id == action.substringAfter('/') } ?: error("供应商模板不存在")
                 if (template.id == "custom") return PluginOutcome.TextInput("供应商名称", "add-provider-save")
-                val custom = CustomProvider(name = template.label, profile = ProviderProfile(template.endpoint, template.model, apiFormat = template.apiFormat, codexDeviceLogin = template.codexDeviceLogin))
+                val custom = CustomProvider(name = uniqueProviderName(template.label, store.settings.customProviders), profile = ProviderProfile(template.endpoint, template.model, apiFormat = template.apiFormat, codexDeviceLogin = template.codexDeviceLogin))
                 store.updateSettings { it.copy(provider = Provider.CUSTOM, customProviderId = custom.id, customProviders = it.customProviders + custom) }
                 return if (template.codexDeviceLogin) PluginOutcome.TextInput("Codex 设备代码登录令牌", "codex-device-save/${custom.id}", secret = true)
                 else PluginOutcome.OpenPage("connection-settings")
             }
             action == "add-provider-save" -> {
                 require(value.trim().length in 1..80 && store.settings.customProviders.size < 20)
-                val custom = CustomProvider(name = value.trim())
+                val custom = CustomProvider(name = uniqueProviderName(value, store.settings.customProviders))
                 store.updateSettings { it.copy(provider = Provider.CUSTOM, customProviderId = custom.id, customProviders = it.customProviders + custom) }
                 return PluginOutcome.OpenPage("connection-settings")
             }
@@ -62,6 +62,7 @@ internal class AgentProviderController(private val store: AgentStore, private va
             action == "provider-name" -> return PluginOutcome.TextInput("供应商名称", "save-provider-name", store.settings.providerLabel())
             action == "save-provider-name" -> {
                 require(value.trim().length in 1..80); val id = requireNotNull(store.settings.customProviderId)
+                require(store.settings.customProviders.none { it.id != id && it.name.trim().equals(value.trim(), true) }) { "已有同名供应商，请换个名称" }
                 store.updateSettings { it.copy(customProviders = it.customProviders.map { custom -> if (custom.id == id) custom.copy(name = value.trim()) else custom }) }; return PluginOutcome.RefreshUi
             }
             action in setOf("endpoint", "key") -> {
@@ -103,9 +104,9 @@ internal class AgentProviderController(private val store: AgentStore, private va
             }
             action.startsWith("model-select/") || action.startsWith("chat-model-select/") -> {
                 val chat = action.startsWith("chat-")
-                val target = if (chat) store.target(context) else store.modelPickerConversation?.let(store::get)
+                val target = store.modelPickerConversation?.let(store::get) ?: if (chat) store.target(context) else null
                 var settings = target?.let(store::connection) ?: store.settings.configuredConnection()
-                val candidates = if (chat) availableModels(store, secrets, settings) else availableModels(store, secrets, settings).filter { it.settings.catalogKey() == settings.catalogKey() }
+                val candidates = availableModels(store, secrets, settings)
                 val match = candidates.firstOrNull { modelAction(it.settings, it.id, chat) == action }?.let { it.settings to it.id } ?: error("模型列表已变化，请重新选择")
                 settings = match.first; val chosen = match.second
                 if (target != null) {

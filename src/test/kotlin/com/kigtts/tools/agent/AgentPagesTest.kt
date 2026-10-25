@@ -33,7 +33,7 @@ class AgentPagesTest {
         val encoded = PluginJson.encodeToString(PluginSnapshot(PluginDescriptor("tools.cloud-agent", "助手", "测试"), PluginContributions(), pages))
         assertTrue(encoded.toByteArray(Charsets.UTF_8).size < 512 * 1024)
         assertTrue(encoded.contains("较长内容仅显示结尾"))
-        assertTrue(encoded.contains("已设置"))
+        assertTrue(encoded.contains("••••••••"))
         val chatActions = agentPage("chat", store, runner, secrets)!!.blocks.filterIsInstance<PageBlock.Actions>().flatMap { it.actions }
         assertTrue(chatActions.any { it.id == "conversations" && it.label == "历史会话" })
         assertFalse(chatActions.any { it.id.startsWith("export-conversation") })

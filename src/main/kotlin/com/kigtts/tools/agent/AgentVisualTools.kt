@@ -17,7 +17,14 @@ internal class AgentVisualTools(private val environment: PluginEnvironment) {
             val value = (reply as AppReply.Data).value
             return ToolResult(value.toString(), images = if (call.name == "render_svg") listOf(images.prepare(path, "SVG实际渲染预览")) else emptyList())
         }
-        if (call.name == "web_ui_guide") return ToolResult(buildJsonObject { put("guide", WebUiGuide.TEXT) }.toString())
+        if (call.name == "web_ui_guide") {
+            val state = environment.appBroker?.request(AppCommand.State)
+            return ToolResult(buildJsonObject {
+                put("guide", WebUiGuide.TEXT)
+                put("theme", (state as? AppReply.Data)?.value?.get("webTheme") ?: JsonNull)
+                put("themeRules", "使用当前主题语义变量，勿复制默认紫色色板或强制亮色。window.KigttsTheme 在页面脚本前可读；监听 kigtts-theme-change 接收后续完整明暗/色板更新。先应用初始值再监听，Canvas/Three.js按事件重绘；不要重载页面或清空功能状态。")
+            }.toString())
+        }
         if (call.name in setOf("read_image", "send_image")) {
             val image = images.prepare(args.string("path"), args["description"]?.jsonPrimitive?.content ?: "图片")
             return ToolResult("{\"ok\":true,\"imageAttached\":true}", images = listOf(image))
