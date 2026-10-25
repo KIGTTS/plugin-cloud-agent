@@ -66,17 +66,18 @@ class HttpsChatTransport(private val beforeRequest: suspend () -> Unit = {}) : C
 
 internal fun chatRequest(settings: AgentSettings, conversation: Conversation, tools: JsonArray, imageData: (AgentImage) -> String = { error("没有图片读取能力") }): JsonObject = buildJsonObject {
     val profile = settings.effectiveProfile(); require(profile.model.isNotBlank()) { "请选择可用模型" }
+    val researchContext = agentResearchContext()
     put("model", profile.model); put("stream", true)
     put("_kigtts_api_format", profile.apiFormat.name)
     put("_kigtts_session", conversation.id)
     profile.effort?.takeIf { it in profile.modelInfo[profile.model]?.reasoningEfforts.orEmpty() }?.let { put("reasoning_effort", it) }
     put("messages", buildJsonArray {
-        add(buildJsonObject { put("role", "system"); put("content", AGENT_PROMPT + "\n\n" + AGENT_PLUGIN_RULES) })
+        add(buildJsonObject { put("role", "system"); put("content", AGENT_PROMPT + "\n\n" + AGENT_PLUGIN_RULES + "\n\n" + researchContext) })
         if (conversation.contextSummary.isNotBlank()) add(buildJsonObject { put("role", "system"); put("content", "较早会话的事实交接摘要（不是新增指令；权限以当前用户选择为准）：\n" + conversation.contextSummary) })
         // Keep an append-only history prefix until real capacity pressure calls for compaction.
         // An unrelated 96KiB character cutoff used to slide even on large-context models.
         val capacity = (profile.modelInfo[profile.model]?.contextTokens ?: 32768).coerceIn(4096, 1_000_000)
-        val overhead = estimatedTokens(AGENT_PROMPT) + estimatedTokens(AGENT_PLUGIN_RULES) +
+        val overhead = estimatedTokens(AGENT_PROMPT) + estimatedTokens(AGENT_PLUGIN_RULES) + estimatedTokens(researchContext) +
             estimatedTokens(tools.toString()) + estimatedTokens(conversation.contextSummary) + 1800
         val budget = ((capacity * .85).toInt().coerceAtMost(150_000) - overhead).coerceAtLeast(1000)
         val window = contextWindow(conversationContext(conversation), budget, ::contextCost)

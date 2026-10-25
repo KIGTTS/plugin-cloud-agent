@@ -1,8 +1,8 @@
 {
   "id": "tools.cloud-agent",
   "name": "AI 助手",
-  "version": "0.9.23",
-  "versionCode": 27,
+  "version": "0.9.24",
+  "versionCode": 28,
   "entryClass": "com.kigtts.tools.agent.CloudAgentPlugin",
   "apiVersion": 26,
   "minSdk": 26,

@@ -2,6 +2,10 @@
 
 目前仍处于研发阶段，后续更新可能包含不兼容变更。更新前请备份重要内容。
 
+## 0.9.24
+
+检索时结合用户语言、地区和访问条件选择来源，优先可靠且方便打开的资料；遇到受限站点会查找合适替代。系统语言、地区偏好和时区随请求更新，只作提示，不作为真实定位。提示词设计参考 [DeepSeek Harness 标准模式](https://github.com/deepseek-ai/deepseek-harness/blob/22ddee3792402c3e70ec5f86a63c3e3e895a2f60/packages/bundle/web-app/presets/standard.patch.yml) 和 [ZCode 官方提示词契约](https://github.com/zai-org/ZCode/blob/3c5b227649371507ddc4eb46ac5133afe6db1cab/apps/zcode-cli/docs/design/v2/loop/system-prompt-contract.md)，具体取舍见 [检索规则](docs/research-policy.md)。
+
 ## 0.9.23
 
 执行任务前先检索相关资料、核对官方说明和版本；界面任务同时查找截图与示例，完成后检查实际页面。检索不可用时说明查证缺口，复用本会话已有的有效资料，并遵从用户的联网选择。
