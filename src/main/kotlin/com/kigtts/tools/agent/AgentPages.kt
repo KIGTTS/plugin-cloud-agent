@@ -35,7 +35,8 @@ internal fun clippedMessage(text: String, limit: Int) = if (text.length <= limit
 /** Snapshots include several pages and must stay below the SDK's 512 KiB Binder budget. */
 internal fun visibleMessageCost(message: AgentMessage, calls: Map<String, ToolCall>): Int =
     message.content.takeLast(16 * 1024).length + message.reasoning.takeLast(8 * 1024).length + message.summary.length +
-        calls[message.toolCallId]?.arguments.orEmpty().take(8000).length + message.images.sumOf { it.path.length + it.description.length } + 128
+        calls[message.toolCallId]?.arguments.orEmpty().take(8000).length + message.images.sumOf { it.path.length + it.description.length } +
+        message.files.sumOf { it.path.length + it.name.length + it.mime.length + 80 } + 128
 internal fun visibleMessages(messages: List<AgentMessage>, maximum: Int = 40 * 1024,
     calls: Map<String, ToolCall> = messages.flatMap { it.calls }.associateBy { it.id }): List<AgentMessage> {
     var budget = maximum

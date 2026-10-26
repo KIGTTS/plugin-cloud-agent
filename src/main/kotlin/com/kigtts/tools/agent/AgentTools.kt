@@ -6,12 +6,13 @@ import kotlinx.serialization.json.*
 
 data class ToolResult(val content: String, val reviewToken: String? = null, val pause: Boolean = false,
     val summary: String? = null, val reviewKind: ReviewKind = ReviewKind.QUICK_TEXT, val transactionId: String? = null, val images: List<AgentImage> = emptyList(),
-    val reconcile: Boolean = false, val options: List<ChatOption> = emptyList())
+    val reconcile: Boolean = false, val options: List<ChatOption> = emptyList(), val files: List<AgentFile> = emptyList())
 
 /** Data contracts are decoded by the SDK, so calls cannot invent owners or bypass host permissions. */
 class AgentTools(private val environment: PluginEnvironment, private val historyReader: () -> Conversation? = { null },
     webSettings: () -> AgentSettings = { AgentSettings() }, webSecrets: AgentSecrets? = null, private val fullAccess: () -> Boolean = { false }) {
     private val stickers = AgentStickerTools(environment, ::resource, ::scopedPath)
+    private val files = AgentFiles(environment.storage, ::scopedPath)
     private val pages = AgentPageTools(environment)
     private val images = AgentImages(environment.storage)
     internal fun imageData(image: AgentImage) = images.data(image)
@@ -44,7 +45,11 @@ class AgentTools(private val environment: PluginEnvironment, private val history
         add(tool("quick_text", "管理快捷文本和HTML资源。先describe/query取得revision。command.type可用describe/query/prepare/commit/discard/transaction/publish-page/publish-media/publish-audio/files/get-file/put-file/set-main/presentation/edit-files/export/import/open-ui。prepare需要transactionId/revision/edits，edit.type取group.put/entry.put/entry.remove/group.remove/entry.move/entry.order/group.order。需要确认时等待用户；不要重试已经执行的变更。", "command", objectSchema()))
         add(tool("stickers", STICKER_TOOL_DESCRIPTION, "command", objectSchema()))
         add(tool("write_file", "在本插件workspace/下写UTF-8文本（HTML/JS/CSS等）。不可访问密钥、其它插件或宿主文件。返回PluginResource可用于publish-page。", "path", stringSchema(), "text" to stringSchema()))
-        add(tool("read_file", "读取本插件workspace/、drafts/、imports/或exports/中的文本。", "path", stringSchema()))
+        add(namedTool("read_file", "分段读取授权工作目录的文本（UTF-8默认，也支持UTF-16LE/BE、GB18030）。offset/nextOffset以字节计，limit最多24000；按nextOffset继续读。二进制返回标识，不能当作已理解。支持源码、JSON、glTF、PLY文本等任意扩展名。", listOf("path"), "path" to "string", "offset" to "integer", "limit" to "integer", "encoding" to "string"))
+        add(tool("inspect_file", "查看原文件名称、大小、SHA256、文件头；MIDI/PLY另返回声明的结构信息。SVG/glTF/GLB用analyze_asset，音视频用对应分析工具。不会运行代码。", "path", stringSchema()))
+        add(namedTool("copy_file", "将原始文件字节复制到workspace/或drafts/项目的指定相对路径，保留格式；默认拒绝覆盖。可将附件作为HTML/插件项目资源。不要用read_file再write_file搬运二进制。", listOf("source", "destination"), "source" to "string", "destination" to "string", "overwrite" to "boolean"))
+        add(tool("send_file", "将现有授权文件作为本会话的可保存附件发送给用户；保留原始字节，不会写入其它插件。需要加入快捷文本页面资源时使用quick_text put-file/edit-files；跨插件只用app describe提供的资源导入接口。", "path", stringSchema()))
+        add(namedTool("deliver_file", "把工作目录中的原文件或完整项目目录交给另一个插件公开的导入入口。先app describe确认pluginId/actionId及接收格式，不猜测入口。插件安装/脚本执行仍须授权；pending表示仅送交，不能宣称已导入。Lua安装优先deliver_lua。", listOf("path", "pluginId", "actionId"), "path" to "string", "pluginId" to "string", "actionId" to "string"))
         add(tool("list_files", "列出本插件workspace/、drafts/、imports/或exports/中的文件。", "path", stringSchema()))
         add(tool("draft_lua", "创建或更新Lua插件草稿。manifest={id,name,version,permissions:[app-control/quick-text-read/quick-text-write/stickers-read/stickers-write子集]}。main.lua return {contributions=function(ctx) return {settingsEntries={{id='entry',label='工具',pageId='main',icon='NONE',cardId='extensions'}}} end,pages=function(ctx) return {{id='main',title='工具',blocks={{type='actions',actions={{id='go',label='运行'}}}}}} end,execute=function(action,ctx) return {type='message',text='完成'} end}。contributions直接返回actions/drawerEntries/settingsEntries对象，pages直接返回数组，不加contributions/pages外壳；按钮用actions，不用items。没有pcall/xpcall、string.rep/format、require/os/io/debug；host.data.read缺失文件返回空串，write仅execute可用。host.app/quick/stickers调用SDK command，host.asset.read只读自身assets。test(ctx)可作自检。安装后必须lua list检查enabled/error并test，错误时先修复。source为源码，生成后deliver_lua安装启用。", "manifest", objectSchema(), "source" to stringSchema()))
         add(tool("deliver_lua", "将draft_lua返回的path交给runtime.lua校验并安装启用。请求批准模式先征得用户同意，完全访问则直接安装，必须按completed回执判断结果。", "path", stringSchema()))
@@ -119,10 +124,17 @@ class AgentTools(private val environment: PluginEnvironment, private val history
                 file.parentFile?.mkdirs(); file.writeText(text, Charsets.UTF_8)
                 ToolResult(buildJsonObject { put("resource", PluginJson.encodeToJsonElement(PluginResource(path))); put("bytes", file.length()) }.toString())
             }
-            "read_file" -> {
-                val file = environment.storage.file(scopedPath(args.string("path")))
-                require(file.isFile && file.length() <= 256 * 1024)
-                ToolResult(buildJsonObject { put("text", file.readText(Charsets.UTF_8)) }.toString())
+            "read_file" -> ToolResult(files.read(args).toString())
+            "inspect_file" -> ToolResult(files.inspect(args.string("path")).toString())
+            "copy_file" -> ToolResult(files.copy(args.string("source"), args.string("destination"), args["overwrite"]?.jsonPrimitive?.booleanOrNull ?: false).toString())
+            "send_file" -> files.reference(args.string("path")).let { file -> ToolResult(buildJsonObject { put("path", file.path); put("name", file.name); put("bytes", file.bytes); put("attached", true) }.toString(), files = listOf(file)) }
+            "deliver_file" -> {
+                val path = scopedPath(args.string("path"))
+                require(environment.storage.file(path).exists()) { "文件不存在" }
+                val reply = requireNotNull(environment.appBroker).request(AppCommand.DeliverResource(args.string("pluginId"), PluginResource(path), args.string("actionId")))
+                val pending = reply is AppReply.Data && reply.value["pending"]?.jsonPrimitive?.booleanOrNull == true
+                ToolResult(PluginJson.encodeToString(reply), pause = pending, reviewKind = ReviewKind.EXTERNAL,
+                    summary = if (pending) "文件已送交导入，请完成导入后继续" else null)
             }
             "list_files" -> {
                 val file = environment.storage.file(scopedPath(args.string("path")))
@@ -149,7 +161,7 @@ class AgentTools(private val environment: PluginEnvironment, private val history
         catch (error: Exception) { ToolResult(buildJsonObject { put("error", "WEB_UNAVAILABLE"); put("message", error.message?.take(200) ?: "暂时无法联网") }.toString()) }
     fun readOnly(call: ToolCall): Boolean {
         if (call.name in setOf("conversation_history", "ask_user", "image_search", "download_image", "read_quick_image", "image_edit", "resize_image", "svg_edit")) return true
-        if (call.name in setOf("download_media", "analyze_audio", "analyze_video", "analyze_asset", "fit_data")) return true
+        if (call.name in setOf("inspect_file", "send_file", "download_media", "analyze_audio", "analyze_video", "analyze_asset", "fit_data")) return true
         if (call.name == "browser") return runCatching { PluginJson.parseToJsonElement(call.arguments).jsonObject["operation"]?.jsonPrimitive?.content !in browserInputOperations }.getOrDefault(false)
         if (call.name in setOf("download_resource", "icon_catalog", "render_svg", "import_icon", "web_ui_guide", "browser_screenshot", "read_image", "send_image", "read_file", "list_files", "read_page_file", "list_quick_text", "read_quick_text", "web_search", "web_fetch")) return true
         val args = runCatching { PluginJson.parseToJsonElement(call.arguments).jsonObject }.getOrNull() ?: return true
@@ -161,7 +173,7 @@ class AgentTools(private val environment: PluginEnvironment, private val history
         return when (call.name) {
             "ask_user" -> false
             "browser" -> args["operation"]?.jsonPrimitive?.content in browserInputOperations
-            "create_page", "deliver_lua", "edit_quick_text", "write_page_file", "write_quick_image" -> true
+            "create_page", "deliver_file", "deliver_lua", "edit_quick_text", "write_page_file", "write_quick_image" -> true
             "lua" -> args["operation"]?.jsonPrimitive?.content !in setOf("list", "read", "test", "validate")
             "app" -> type !in setOf("describe", "state", "browser-capture")
             "quick_text" -> type !in setOf("describe", "query", "files", "get-file", "transaction", "prepare", "discard")
@@ -177,6 +189,7 @@ class AgentTools(private val environment: PluginEnvironment, private val history
             "write_page_file" -> "修改页面文件：" + text("path")
             "create_page" -> "创建网页快捷文本：" + text("title").ifBlank { "未命名页面" } + "\n字幕：" + text("text")
             "deliver_lua" -> "安装并启用 Lua 插件：" + text("path").substringAfterLast('/')
+            "deliver_file" -> "向插件交付文件：" + text("pluginId") + "\n" + text("path")
             "lua" -> "Lua 插件：" + text("project") + "\n操作：" + text("operation") + " " + text("action")
             "quick_text" -> "修改快捷文本或页面资源"
             "stickers" -> "修改贴纸或拍立得"

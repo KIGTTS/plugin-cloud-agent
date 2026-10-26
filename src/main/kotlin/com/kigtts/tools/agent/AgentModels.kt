@@ -40,14 +40,14 @@ import java.util.UUID
     val content: String = "", val reasoning: String = "", val calls: List<ToolCall> = emptyList(),
     val toolCallId: String? = null, val state: MessageState = MessageState.COMPLETE,
     val summary: String = "", val images: List<AgentImage> = emptyList(), val visualInput: Boolean = false, val reasoningDone: Boolean = false,
-    val usage: AgentUsage? = null, val options: List<ChatOption> = emptyList())
+    val usage: AgentUsage? = null, val options: List<ChatOption> = emptyList(), val files: List<AgentFile> = emptyList())
 @Serializable data class AgentImage(val path: String, val mime: String = "image/jpeg", val description: String = "图片")
 @Serializable data class AgentQueuedMessage(val id: String = UUID.randomUUID().toString(), val text: String,
-    val images: List<AgentImage> = emptyList(), val createdAt: Long = System.currentTimeMillis(), val priority: Boolean = false)
+    val images: List<AgentImage> = emptyList(), val createdAt: Long = System.currentTimeMillis(), val priority: Boolean = false, val files: List<AgentFile> = emptyList())
 @Serializable data class Conversation(val id: String = UUID.randomUUID().toString(), val title: String = "新会话",
     val messages: List<AgentMessage> = emptyList(), val provider: Provider? = null, val model: String? = null, val customProviderId: String? = null, val reasoningEffort: String? = null,
     val updatedAt: Long = System.currentTimeMillis(), val draftImages: List<AgentImage> = emptyList(), val queued: List<AgentQueuedMessage> = emptyList(),
-    val contextSummary: String = "", val compactedThroughId: String? = null, val visionUnavailableModel: String? = null)
+    val contextSummary: String = "", val compactedThroughId: String? = null, val visionUnavailableModel: String? = null, val draftFiles: List<AgentFile> = emptyList())
 @Serializable enum class ReviewKind { QUICK_TEXT, STICKERS, EXTERNAL, TOOL }
 @Serializable data class PendingReview(val conversationId: String, val toolCallId: String, val token: String,
     val summary: String, val createdAt: Long = System.currentTimeMillis(), val kind: ReviewKind = ReviewKind.QUICK_TEXT,

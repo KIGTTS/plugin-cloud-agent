@@ -21,7 +21,7 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
     open fun isRunning(id: String) = running && runningConversation == id
     @Synchronized open fun send(conversationId: String, text: String) {
         check(!running) { "请先停止当前回答" }; check(store.pendingFor(conversationId) == null) { "请先完成或取消待审核操作" }
-        require((text.isNotBlank() || store.get(conversationId)?.draftImages?.isNotEmpty() == true) && text.length <= 32 * 1024)
+        require((text.isNotBlank() || (store.get(conversationId)?.let { it.draftImages.isNotEmpty() || it.draftFiles.isNotEmpty() } == true)) && text.length <= 32 * 1024)
         val settings = store.connection(requireNotNull(store.get(conversationId)))
         val profile = settings.effectiveProfile(); apiEndpoint(profile)
         // The picker only exposes refreshed catalog entries. Keep an already selected
@@ -32,8 +32,8 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
         check(openCodeChatModel(settings.provider, profile.model)) { "此 OpenCode 模型使用尚未支持的协议，请在会话弹窗选择兼容模型" }
         val conversation = requireNotNull(store.get(conversationId))
         queuePaused = false
-        store.save(conversation.copy(title = if (conversation.messages.isEmpty()) text.trim().take(36).ifBlank { "图片会话" } else conversation.title, draftImages = emptyList()))
-        store.message(conversationId, AgentMessage(role = "user", content = text.trim(), images = conversation.draftImages))
+        store.save(conversation.copy(title = if (conversation.messages.isEmpty()) text.trim().take(36).ifBlank { "附件会话" } else conversation.title, draftImages = emptyList(), draftFiles = emptyList()))
+        store.message(conversationId, AgentMessage(role = "user", content = text.trim(), images = conversation.draftImages, files = conversation.draftFiles))
         launch(conversationId, settings)
     }
     @Synchronized open fun continueAfterReview(conversationId: String) {
@@ -142,6 +142,7 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
                         }).forAccess(store.settings.access)
                         store.message(id, AgentMessage(role = "tool", content = reply.content, toolCallId = call.id)); changed()
                         batchImages += reply.images
+                        if (reply.files.isNotEmpty()) store.message(id, AgentMessage(role = "assistant", files = reply.files))
                         if (reply.options.isNotEmpty()) {
                             store.message(id, AgentMessage(role = "assistant", content = reply.summary.orEmpty(), options = reply.options))
                             attachBatchImages(); changed(); return
@@ -203,10 +204,10 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
     }
     @Synchronized open fun enqueue(id: String, text: String, interrupt: Boolean = false) {
         check(store.pendingFor(id) == null) { "请先处理待批准或结果待核对的操作" }
-        val conversation = requireNotNull(store.get(id)); require(text.isNotBlank() || conversation.draftImages.isNotEmpty())
+        val conversation = requireNotNull(store.get(id)); require(text.isNotBlank() || (conversation.draftImages.isNotEmpty() || conversation.draftFiles.isNotEmpty()))
         require(text.length <= 32000 && conversation.queued.size < 20) { "待发送消息过多" }
-        val item = AgentQueuedMessage(text = text, images = conversation.draftImages, priority = interrupt, createdAt = if (interrupt) nextPriorityTime() else System.currentTimeMillis())
-        store.modify(id) { current -> current.copy(draftImages = emptyList(), queued = if (interrupt) listOf(item) + current.queued else current.queued + item) }
+        val item = AgentQueuedMessage(text = text, images = conversation.draftImages, files = conversation.draftFiles, priority = interrupt, createdAt = if (interrupt) nextPriorityTime() else System.currentTimeMillis())
+        store.modify(id) { current -> current.copy(draftImages = emptyList(), draftFiles = emptyList(), queued = if (interrupt) listOf(item) + current.queued else current.queued + item) }
         queuePaused = false; changed()
         if (interrupt && running) { active?.cancel(); transport.cancel() } else if (!running) startQueued()
     }
@@ -237,8 +238,8 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
             .mapNotNull { conversation -> conversation.queued.firstOrNull()?.let { conversation.id to it } }
             .sortedWith(compareByDescending<Pair<String, AgentQueuedMessage>> { it.second.priority }.thenBy { it.second.createdAt }).firstOrNull() ?: return
         val conversation = requireNotNull(store.get(next.first))
-        store.modify(conversation.id) { current -> current.copy(queued = current.queued.filterNot { it.id == next.second.id }, title = if (current.messages.isEmpty()) next.second.text.take(36).ifBlank { "图片会话" } else current.title) }
-        store.message(conversation.id, AgentMessage(role = "user", content = next.second.text, images = next.second.images))
+        store.modify(conversation.id) { current -> current.copy(queued = current.queued.filterNot { it.id == next.second.id }, title = if (current.messages.isEmpty()) next.second.text.take(36).ifBlank { "附件会话" } else current.title) }
+        store.message(conversation.id, AgentMessage(role = "user", content = next.second.text, images = next.second.images, files = next.second.files))
         launch(conversation.id, store.connection(conversation))
     }
     open fun stop() { queuePaused = true; active?.cancel(); transport.cancel(); changed() }

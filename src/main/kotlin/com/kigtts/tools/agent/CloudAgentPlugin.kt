@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.24")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.25")
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
@@ -53,6 +53,7 @@ class CloudAgentPlugin : KigPlugin {
     override suspend fun execute(actionId: String, context: PluginContext): PluginOutcome {
         val value = context.inputs["value"].orEmpty()
         try {
+            AgentFileActions(environment, store).handle(actionId, context)?.let { changed(); return it }
             providers.handle(actionId, context)?.let { changed(); return it }
             val result = when {
                 actionId == "overlay-add" -> {

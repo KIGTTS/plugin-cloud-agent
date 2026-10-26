@@ -34,6 +34,8 @@ KIGTTS的云端助手独立仓库。本仓库采用 **MIT**，完整文本见[LI
 
 ## 构建
 
+0.9.25增加[通用文件附件与项目资源](docs/files.md)，需要API31宿主。
+
 需要JDK17、Android SDK36、PowerShell7。克隆时获取已固定版本的SDK及共享组件，不需要克隆主程序。
 
 ```powershell

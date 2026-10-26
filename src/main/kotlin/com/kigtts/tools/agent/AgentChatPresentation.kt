@@ -31,7 +31,7 @@ internal fun agentChat(store: AgentStore, runner: AgentRunner, secrets: AgentSec
         // their earlier streaming thought row instead of leaving it "thinking" forever.
         val tool = calls[message.toolCallId]
         val title = when (tool?.name) {
-            "read_file" -> "已读取文件"; "write_file" -> "已写入文件"; "list_files" -> "已查看目录"
+            "read_file" -> "已读取文件"; "inspect_file" -> "查看文件信息"; "copy_file" -> "复制项目文件"; "send_file" -> "发送文件"; "write_file" -> "已写入文件"; "list_files" -> "已查看目录"
             "create_page" -> "创建网页卡片"; "web_search" -> "联网搜索"; "web_fetch" -> "读取网页"
             "image_edit" -> "处理图片"; "resize_image" -> "缩放图片"; "svg_edit" -> "编辑矢量图"; "image_search" -> "搜索图片"; "download_image" -> "下载图片"; "read_quick_image" -> "读取快捷文本图片"; "write_quick_image" -> "保存快捷文本图片"
             "deliver_lua" -> "安装 Lua 插件"; "draft_lua" -> "编写 Lua 插件"; "lua" -> "调试 Lua 插件"
@@ -47,6 +47,7 @@ internal fun agentChat(store: AgentStore, runner: AgentRunner, secrets: AgentSec
             reasoning = if (settings.showReasoning) message.reasoning.takeLast(8 * 1024) else "",
             state = ChatMessageState.valueOf(message.state.name), summary = if (message.role == "tool") toolSummary(message.content) else message.summary.take(1600), toolName = title,
             detail = if (message.role == "tool") tool?.arguments.orEmpty().take(8000) else "", icon = icon,
+            files = message.files.map { it.chatFile() },
             images = message.images.map { ChatImage(PluginResource(it.path), it.description) },
             thinking = message.role == "assistant" && message.state == MessageState.STREAMING && message.content.isBlank() && !message.reasoningDone, position = positions[message.id] ?: -1,
             hasReasoning = message.role == "assistant" && message.reasoning.isNotBlank(),
@@ -63,6 +64,7 @@ internal fun agentChat(store: AgentStore, runner: AgentRunner, secrets: AgentSec
         approval = pending?.let { ChatApproval("请求批准", "resume", "discard-review", it.summary.take(4000),
             if (it.token.isNotEmpty()) "review" else null) }, backgroundRunning = runner.running, imageAction = "attach-image", removeImageAction = "remove-image",
         draftImages = conversation?.draftImages.orEmpty().map { ChatImage(PluginResource(it.path), it.description) },
-        queueAction = "queue", queued = conversation?.queued.orEmpty().map { ChatQueuedMessage(it.id, it.text.take(1000).ifBlank { "图片消息" }, "queue-remove/" + it.id, "queue-front/" + it.id, "queue-steer/" + it.id, "queue-order") },
-        historyAction = "load-earlier", historyTotal = all.size)
+        queueAction = "queue", queued = conversation?.queued.orEmpty().map { ChatQueuedMessage(it.id, it.text.take(1000).ifBlank { "附件消息" }, "queue-remove/" + it.id, "queue-front/" + it.id, "queue-steer/" + it.id, "queue-order") },
+        historyAction = "load-earlier", historyTotal = all.size, fileAction = "attach-file", removeFileAction = "remove-file",
+        draftFiles = conversation?.draftFiles.orEmpty().map { it.chatFile() })
 }

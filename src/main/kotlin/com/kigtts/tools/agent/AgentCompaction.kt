@@ -11,7 +11,7 @@ internal fun isContextOverflow(detail: String): Boolean = detail.lowercase().let
 
 /** Approximation, not a provider tokenizer: price CJK conservatively, with image headroom. */
 internal fun estimatedTokens(text: String): Int = text.sumOf { if (it.code >= 0x2e80) 4 else 1 } / 4 + 1
-internal fun contextCost(message: AgentMessage) = estimatedTokens(message.content) + estimatedTokens(message.reasoning) +
+internal fun contextCost(message: AgentMessage) = estimatedTokens(message.content) + estimatedTokens(message.fileContext()) + estimatedTokens(message.reasoning) +
     message.calls.sumOf { estimatedTokens(it.arguments) + 40 } + message.images.size * 2000 + 32
 internal fun conversationContext(conversation: Conversation): List<AgentMessage> {
     val messages = historyContext(conversation.messages)

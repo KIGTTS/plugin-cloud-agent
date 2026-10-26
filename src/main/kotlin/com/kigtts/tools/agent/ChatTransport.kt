@@ -122,12 +122,13 @@ private fun adaptRequest(source: JsonObject, format: ApiFormat): JsonObject {
 }
 internal fun AgentMessage.toWire(imageData: (AgentImage) -> String = { error("没有图片读取能力") }, recentImages: Set<String> = images.map { it.path }.toSet()): JsonObject = buildJsonObject {
     put("role", role)
+    val fileText = fileContext()
     val visibleImages = images.filter { it.path in recentImages }.mapNotNull { image ->
         runCatching { imageData(image) }.getOrNull()?.let { image to it }
     }
-    if (visibleImages.isEmpty()) put("content", content + if (images.isNotEmpty()) "\n[图片记录：${images.joinToString { it.description + "：" + it.path }}；本轮未附图片字节，不能推测图像内容。]" else "")
+    if (visibleImages.isEmpty()) put("content", content + fileText + if (images.isNotEmpty()) "\n[图片记录：${images.joinToString { it.description + "：" + it.path }}；本轮未附图片字节，不能推测图像内容。]" else "")
     else put("content", buildJsonArray {
-        add(buildJsonObject { put("type", "text"); put("text", content.ifBlank { "请查看图片" }) })
+        add(buildJsonObject { put("type", "text"); put("text", content.ifBlank { "请查看图片" } + fileText) })
         visibleImages.forEach { (_, data) -> add(buildJsonObject { put("type", "image_url"); put("image_url", buildJsonObject { put("url", data) }) }) }
     })
     if (role == "assistant" && reasoning.isNotEmpty()) put("reasoning_content", reasoning)
