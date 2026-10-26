@@ -30,7 +30,7 @@ class AgentWebAccessTest {
     }
     @Test fun addedOfficialConnectionsWorkEvenWhileChatUsesAnotherProviderAndConfigurationChangesApplyImmediately() = runTest {
         val official = CustomProvider(name = "任意名称", profile = ProviderProfile("https://api.deepseek.com/anthropic", ""))
-        var settings = AgentSettings(provider = Provider.OPENAI, customProviders = listOf(official))
+        var settings = AgentSettings(provider = Provider.OPENAI, customProviders = listOf(official), search = AgentSearchSettings(source = SearchSource.DEEPSEEK))
         val secrets = Secrets().apply { writeCustom(official.id, "test-key-one") }
         val seen = mutableListOf<String>()
         val web = AgentWebAccess({ settings }, secrets, DeepSeekWebApi { operation, key, body ->
@@ -48,7 +48,7 @@ class AgentWebAccessTest {
     }
     @Test fun invalidKeysUseAnotherOfficialConnectionAndAreRetriedAfterTheKeyChanges() = runTest {
         val second = CustomProvider(profile = ProviderProfile("https://api.deepseek.com/v1", ""))
-        val settings = AgentSettings(customProviders = listOf(second))
+        val settings = AgentSettings(customProviders = listOf(second), search = AgentSearchSettings(source = SearchSource.DEEPSEEK))
         val secrets = Secrets().apply { write(Provider.DEEPSEEK, "test-bad"); writeCustom(second.id, "test-good") }
         val seen = mutableListOf<String>()
         val web = AgentWebAccess({ settings }, secrets, DeepSeekWebApi { _, key, _ ->
@@ -65,7 +65,7 @@ class AgentWebAccessTest {
         var time = 0L
         var calls = 0
         val secrets = Secrets().apply { write(Provider.DEEPSEEK, "test-never-return-this") }
-        val web = AgentWebAccess(secrets = secrets, api = DeepSeekWebApi { _, _, _ -> calls++; throw DeepSeekWebFailure(401) },
+        val web = AgentWebAccess(settings = { AgentSettings(search = AgentSearchSettings(source = SearchSource.DEEPSEEK)) }, secrets = secrets, api = DeepSeekWebApi { _, _, _ -> calls++; throw DeepSeekWebFailure(401) },
             searchFallback = { ToolResult("[]") }, now = { time })
         repeat(2) {
             val result = web.search("A")
@@ -77,7 +77,7 @@ class AgentWebAccessTest {
     }
     @Test fun fetchKeepsMarkdownAndReportsTruncationAndCancellationDoesNotFallBack() = runTest {
         val secrets = Secrets().apply { write(Provider.DEEPSEEK, "test-key") }
-        val web = AgentWebAccess(secrets = secrets, api = DeepSeekWebApi { operation, _, body ->
+        val web = AgentWebAccess(settings = { AgentSettings(search = AgentSearchSettings(source = SearchSource.DEEPSEEK)) }, secrets = secrets, api = DeepSeekWebApi { operation, _, body ->
             assertEquals("fetch", operation); assertEquals("https://example.com/article?q=1", body["url"]?.jsonPrimitive?.content)
             buildJsonObject { put("title", "资料"); put("content", "# 标题\n\n" + "文".repeat(25000)) }
         })
@@ -86,7 +86,7 @@ class AgentWebAccessTest {
         assertTrue(page["text"]!!.jsonPrimitive.content.startsWith("# 标题\n\n"))
         assertEquals(24_000, page["text"]!!.jsonPrimitive.content.length)
         assertTrue(page["truncated"]!!.jsonPrimitive.boolean)
-        val cancelled = AgentWebAccess(secrets = secrets, api = DeepSeekWebApi { _, _, _ -> throw CancellationException() },
+        val cancelled = AgentWebAccess(settings = { AgentSettings(search = AgentSearchSettings(source = SearchSource.DEEPSEEK)) }, secrets = secrets, api = DeepSeekWebApi { _, _, _ -> throw CancellationException() },
             searchFallback = { error("Cancelled tools must stop") })
         try { cancelled.search("A"); fail("Cancellation must propagate") } catch (_: CancellationException) { }
     }

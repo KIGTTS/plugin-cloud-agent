@@ -32,7 +32,7 @@ import java.util.UUID
     val profiles: Map<Provider, ProviderProfile> = Provider.entries.associateWith { ProviderProfile(it.endpoint, it.model) },
     val showReasoning: Boolean = false, val access: AgentAccessMode = AgentAccessMode.REQUEST_APPROVAL, val toolsEnabled: Boolean = true,
     val selectedConversation: String? = null, val pinHomeIcon: Boolean = false, val customProviders: List<CustomProvider> = emptyList(), val customProviderId: String? = null,
-    val fullAccessConfirmed: Boolean = false, val taskNotifications: Boolean = true, val overlayShortcut: Boolean = false)
+    val fullAccessConfirmed: Boolean = false, val taskNotifications: Boolean = true, val overlayShortcut: Boolean = false, val search: AgentSearchSettings = AgentSearchSettings())
 @Serializable enum class AgentAccessMode { REQUEST_APPROVAL, ASSISTED, FULL }
 @Serializable data class ToolCall(val id: String, val name: String, val arguments: String)
 @Serializable enum class MessageState { COMPLETE, STREAMING, FAILED, CANCELLED }

@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.26")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.27")
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
@@ -16,6 +16,7 @@ class CloudAgentPlugin : KigPlugin {
     private lateinit var notifications: AgentTaskNotifications
     private lateinit var taskBadges: AgentTaskBadges
     private lateinit var catalog: AgentModelCatalog
+    private lateinit var searchSettings: AgentSearchController
     private lateinit var providers: AgentProviderController
     private lateinit var reviews: AgentReviewController
     private val revision = MutableStateFlow(0L)
@@ -34,7 +35,8 @@ class CloudAgentPlugin : KigPlugin {
             taskBadges.changed(id, running); notifications.changed(id, running)
         }
         reviews = AgentReviewController(environment, store, runner)
-        catalog = AgentModelCatalog(store, secrets, ::changed, HttpsModelsTransport { environment.requirePermission("network") })
+        searchSettings = AgentSearchController(store, secrets)
+        catalog = AgentModelCatalog(store, secrets, ::changed, HttpsModelsTransport { environment.requirePermission("network") }, onValidated = searchSettings::validated)
         providers = AgentProviderController(store, secrets, runner, catalog)
         catalog.refresh(store.settings.configuredConnection())
         if (store.settings.overlayShortcut) runCatching { registerAgentOverlay(environment, false) }
@@ -49,11 +51,15 @@ class CloudAgentPlugin : KigPlugin {
         SettingsEntry("settings", "助手设置", "settings", PluginIcon.SETTINGS, cardId = "assistant", cardTitle = "助手", summary = "服务、模型与密钥", order = 1)),
         automationActions = listOf("open"))
     }
-    override fun page(pageId: String, context: PluginContext) = agentPage(pageId, store, runner, secrets)
+    override fun page(pageId: String, context: PluginContext) = searchSettings.decorate(searchSettings.page(pageId) ?: agentPage(pageId, store, runner, secrets))
     override suspend fun execute(actionId: String, context: PluginContext): PluginOutcome {
         val value = context.inputs["value"].orEmpty()
         try {
             AgentFileActions(environment, store).handle(actionId, context)?.let { changed(); return it }
+            searchSettings.handle(actionId, value)?.let { outcome ->
+                if (actionId.startsWith("search-offer/chat-viewed/")) taskBadges.viewed(actionId.removePrefix("search-offer/chat-viewed/"))
+                changed(); return outcome
+            }
             providers.handle(actionId, context)?.let { changed(); return it }
             val result = when {
                 actionId == "overlay-add" -> {

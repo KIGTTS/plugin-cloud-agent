@@ -63,7 +63,8 @@ internal class HttpsModelsTransport(private val beforeRequest: suspend () -> Uni
     }
 }
 internal class AgentModelCatalog(private val store: AgentStore, private val secrets: AgentSecrets, private val changed: () -> Unit,
-    private val transport: ModelsTransport = HttpsModelsTransport(), private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)) {
+    private val transport: ModelsTransport = HttpsModelsTransport(), private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val onValidated: (AgentSettings, String) -> Unit = { _, _ -> }) {
     private val jobs = mutableMapOf<String, Job>()
     @Synchronized fun refresh(settings: AgentSettings, force: Boolean = false) {
         val key = settings.catalogKey(); val profile = settings.effectiveProfile()
@@ -76,7 +77,8 @@ internal class AgentModelCatalog(private val store: AgentStore, private val secr
         store.modelStatus = store.modelStatus + (key to "正在获取模型列表…"); changed()
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                val discovered = transport.list(modelsEndpoint(profile.endpoint), secrets.read(settings))
+                val usedKey = secrets.read(settings)
+                val discovered = transport.list(modelsEndpoint(profile.endpoint), usedKey)
                 val models = discovered.models
                 currentCoroutineContext().ensureActive()
                 store.updateSettings { current ->
@@ -87,6 +89,7 @@ internal class AgentModelCatalog(private val store: AgentStore, private val secr
                         if (old.endpoint != profile.endpoint) current else current.copy(profiles = current.profiles + (settings.provider to old.copy(models = models, modelsUpdatedAt = System.currentTimeMillis(), modelInfo = old.modelInfo.filterKeys { it in models } + discovered.info)))
                     }
                 }
+                if (models.isNotEmpty()) onValidated(settings, usedKey)
                 store.modelStatus = store.modelStatus + (key to "已获取 ${models.size} 个模型")
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { store.modelStatus = store.modelStatus + (key to (error.message?.take(240) ?: "模型列表获取失败，已保留原列表")) }

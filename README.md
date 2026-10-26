@@ -2,6 +2,12 @@
 
 目前仍处于研发阶段，后续更新可能包含不兼容变更。更新前请备份重要内容。
 
+## 0.9.27
+
+助手设置增加「搜索与网页读取」，可选择 Bing、DeepSeek、博查、Tavily、Brave 或 Serper，分别配置 API、结果数量和备用来源。首次验证可用的 DeepSeek 官方连接时，会询问是否设为默认搜索源。
+
+配置及接口参考见[搜索设置](docs/search-settings.md)。
+
 ## 0.9.24
 
 检索时结合用户语言、地区和访问条件选择来源，优先可靠且方便打开的资料；遇到受限站点会查找合适替代。系统语言、地区偏好和时区随请求更新，只作提示，不作为真实定位。提示词设计参考 [DeepSeek Harness 标准模式](https://github.com/deepseek-ai/deepseek-harness/blob/22ddee3792402c3e70ec5f86a63c3e3e895a2f60/packages/bundle/web-app/presets/standard.patch.yml) 和 [ZCode 官方提示词契约](https://github.com/zai-org/ZCode/blob/3c5b227649371507ddc4eb46ac5133afe6db1cab/apps/zcode-cli/docs/design/v2/loop/system-prompt-contract.md)，具体取舍见 [检索规则](docs/research-policy.md)。

@@ -10,11 +10,12 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 /** Public HTTPS research, bounded replies, no provider key forwarded to websites. */
 internal object AgentWebTools {
-    suspend fun search(query: String): ToolResult = withContext(Dispatchers.IO) {
+    suspend fun search(query: String): ToolResult = search(query, 8)
+    suspend fun search(query: String, count: Int): ToolResult = withContext(Dispatchers.IO) {
         require(query.isNotBlank() && query.length <= 500)
         val url = "https://www.bing.com/search?format=rss&q=" + URLEncoder.encode(query, "UTF-8")
         val xml = get(url).second
-        ToolResult(parseSearch(xml).toString())
+        ToolResult(parseSearch(xml, count).toString())
     }
     suspend fun searchImages(query: String): ToolResult = withContext(Dispatchers.IO) {
         require(query.isNotBlank() && query.length <= 300)
@@ -32,7 +33,7 @@ internal object AgentWebTools {
             } })
         }.toString())
     }
-    internal fun parseSearch(xml: String): JsonArray {
+    internal fun parseSearch(xml: String, count: Int = 8): JsonArray {
         val factory = DocumentBuilderFactory.newInstance()
         listOf("http://apache.org/xml/features/disallow-doctype-decl" to true,
             "http://xml.org/sax/features/external-general-entities" to false,
@@ -41,7 +42,7 @@ internal object AgentWebTools {
         val document = factory.newDocumentBuilder().parse(xml.byteInputStream())
         val items = document.getElementsByTagName("item")
         return buildJsonArray {
-            for (index in 0 until minOf(items.length, 8)) {
+            for (index in 0 until minOf(items.length, count.coerceIn(3, 10))) {
                 val item = items.item(index) as org.w3c.dom.Element
                 fun value(key: String) = item.getElementsByTagName(key).item(0)?.textContent.orEmpty()
                 val url = value("link")

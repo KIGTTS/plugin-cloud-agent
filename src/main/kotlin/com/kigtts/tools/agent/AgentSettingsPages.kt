@@ -8,6 +8,7 @@ internal fun agentSettingsPage(id: String, store: AgentStore, secrets: AgentSecr
     return when (id) {
         "settings" -> PluginPage(id, "助手设置", listOf(
             PageBlock.Group("模型服务", listOf(PageBlock.Actions(listOf(PageAction("connections", "供应商与模型", PluginIcon.SETTINGS))))),
+            PageBlock.Group("联网", listOf(PageBlock.Actions(listOf(PageAction("search-settings", "搜索与网页读取", PluginIcon.NONE, symbol = "manage_search"))))),
             PageBlock.Group("快捷入口", listOf(PageBlock.Actions(listOf(PageAction("overlay-add", "添加到悬浮窗", PluginIcon.NONE, symbol = "bubble_chart"))))),
             PageBlock.Group("使用体验", listOf(
                 PageBlock.Toggle("任务通知", settings.taskNotifications, "task-notifications", "查看任务进度和结果，点按通知返回会话", PluginIcon.NONE),
