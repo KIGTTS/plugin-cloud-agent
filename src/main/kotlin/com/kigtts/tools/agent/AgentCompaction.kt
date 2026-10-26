@@ -40,7 +40,7 @@ internal fun compactionSpan(conversation: Conversation, retain: Int, inputBudget
     var cost = 0
     val span = candidates.takeWhile { group ->
         val complete = group.flatMap { it.calls }.all { call -> group.any { it.role == "tool" && it.toolCallId == call.id && it.state == MessageState.COMPLETE } }
-        cost += group.sumOf { estimatedTokens(it.content.take(12000)) + it.calls.sumOf { call -> estimatedTokens(call.arguments.take(12000)) } + 64 }
+        cost += group.sumOf { estimatedTokens(it.content.take(12000)) + estimatedTokens(it.fileContext()) + it.calls.sumOf { call -> estimatedTokens(call.arguments.take(12000)) } + 64 }
         complete && cost <= inputBudget
     }.flatten()
     return span.takeIf { it.size >= 2 }?.let { CompactionSpan(it, it.last().id) }
@@ -66,6 +66,7 @@ internal class AgentCompactor(private val store: AgentStore, private val transpo
                 message.toolCallId?.let { put("toolCallId", it) }
                 if (message.calls.isNotEmpty()) put("calls", PluginJson.encodeToJsonElement(message.calls.map { it.copy(arguments = it.arguments.take(12000)) }))
                 if (message.images.isNotEmpty()) put("imagePaths", buildJsonArray { message.images.forEach { add(it.path) } })
+                if (message.files.isNotEmpty()) put("files", PluginJson.encodeToJsonElement(message.files))
             }) } })
         }
         val request = buildJsonObject {

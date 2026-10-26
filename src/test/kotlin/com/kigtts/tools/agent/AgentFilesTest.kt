@@ -128,4 +128,18 @@ class AgentFilesTest {
         assertTrue(requests[0].contains("imports/a.c")); assertTrue(requests[1].contains("imports/b.mid"))
         assertTrue(store.get(c.id)!!.draftFiles.isEmpty()); assertTrue(store.get(c.id)!!.queued.isEmpty())
     }
+    @Test fun longTaskCompactionIncludesOriginalFileReferences() = runTest {
+        val env = environment(); val store = AgentStore(env.storage); val c = store.create()
+        val ref = AgentFile("imports/original.ply", "original.ply", 4096)
+        store.save(c.copy(messages = listOf(AgentMessage(role = "user", files = listOf(ref))) + List(50) { AgentMessage(role = "assistant", content = "a".repeat(1000)) }))
+        var requestText = ""
+        val transport = object : ChatTransport {
+            override suspend fun stream(endpoint: String, apiKey: String, request: JsonObject, delta: suspend (StreamAssembler) -> Unit): StreamAssembler {
+                requestText = request.toString()
+                return StreamAssembler().apply { accept("""{"choices":[{"delta":{"content":"保留原始文件imports/original.ply"},"finish_reason":"stop"}]}"""); accept("[DONE]") }
+            }
+        }
+        assertTrue(AgentCompactor(store, transport, "https://example.test", "test", store.settings, JsonArray(emptyList())).compact(c.id, true))
+        assertTrue(requestText.contains(ref.path)); assertTrue(requestText.contains(ref.name))
+    }
 }
