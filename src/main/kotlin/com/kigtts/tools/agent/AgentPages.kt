@@ -8,27 +8,27 @@ internal fun agentPage(id: String, store: AgentStore, runner: AgentRunner, secre
         "chat" -> {
             val conversation = store.selected()
             val blocks = mutableListOf<PageBlock>(PageBlock.Actions(listOf(
-                PageAction("conversations", "历史会话", PluginIcon.NONE, symbol = "history"),
-                PageAction("new", "新会话", PluginIcon.ADD), PageAction("settings", "助手设置", PluginIcon.SETTINGS))))
+                PageAction("conversations", copy("chat.history", "历史会话"), PluginIcon.NONE, symbol = "history"),
+                PageAction("new", copy("chat.new", "新会话"), PluginIcon.ADD), PageAction("settings", copy("entry.settings", "助手设置"), PluginIcon.SETTINGS))))
             blocks += agentChat(store, runner, secrets, context, copy)
             PluginPage(id, conversation?.title ?: copy("plugin.title", "AI 助手"), blocks, onEnterAction = conversation?.let { "chat-viewed/${it.id}" })
         }
-        "conversations" -> PluginPage(id, "会话", listOf(PageBlock.Actions(listOf(PageAction("new", "新会话", PluginIcon.ADD)))),
+        "conversations" -> PluginPage(id, copy("chat.list", "会话"), listOf(PageBlock.Actions(listOf(PageAction("new", copy("chat.new", "新会话"), PluginIcon.ADD)))),
             management = ManagementList("conversations", store.list().map { conversation ->
                 ManagementItem(conversation.id, conversation.title,
                     subtitle = (when {
-                        runner.isRunning(conversation.id) -> "正在执行 · "
-                        store.pendingFor(conversation.id) != null -> "等待处理 · "
+                        runner.isRunning(conversation.id) -> copy("chat.running", "正在执行") + " · "
+                        store.pendingFor(conversation.id) != null -> copy("chat.waiting", "等待处理") + " · "
                         else -> ""
-                    }) + "${conversation.messages.count { it.role == "user" && !it.visualInput }} 条消息", icon = PluginIcon.TEXT,
+                    }) + copy("chat.messages", "{count} 条消息").replace("{count}", conversation.messages.count { it.role == "user" && !it.visualInput }.toString()), icon = PluginIcon.TEXT,
                     selected = settings.selectedConversation == conversation.id, primaryAction = "select/${conversation.id}",
-                    actions = listOf(PageAction("export-conversation/${conversation.id}", "导出会话", PluginIcon.EXPORT),
-                        PageAction("rename/${conversation.id}", "重命名", PluginIcon.EDIT), PageAction("delete/${conversation.id}", "删除", PluginIcon.CLOSE)))
-            }, emptyText = "创建会话，开始聊天"))
+                    actions = listOf(PageAction("export-conversation/${conversation.id}", copy("chat.export", "导出会话"), PluginIcon.EXPORT),
+                        PageAction("rename/${conversation.id}", copy("chat.rename", "重命名"), PluginIcon.EDIT), PageAction("delete/${conversation.id}", copy("chat.delete", "删除"), PluginIcon.CLOSE)))
+            }, emptyText = copy("chat.empty", "创建会话，开始聊天")))
         "models" -> modelPickerPage(store, secrets)
         "providers" -> providersPage(store)
         "provider-templates" -> providerTemplatesPage()
-        else -> agentSettingsPage(id, store, secrets)
+        else -> agentSettingsPage(id, store, secrets, copy)
     }
 }
 internal fun clippedMessage(text: String, limit: Int) = if (text.length <= limit) text else "较长内容仅显示结尾，可导出完整会话\n\n" + text.takeLast(limit)

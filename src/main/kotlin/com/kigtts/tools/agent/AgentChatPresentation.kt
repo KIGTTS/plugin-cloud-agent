@@ -61,10 +61,10 @@ internal fun agentChat(store: AgentStore, runner: AgentRunner, secrets: AgentSec
             ChatControl(copy("control.model", "选择模型"), modelOptions(store, settings, secrets), modelAction(settings, profile.model, true)),
             ChatControl(copy("control.access", "权限"), listOf(ChatOption("access/ask", copy("access.ask", "手动审核"), "ask"), ChatOption("access/assist", copy("access.assist", "帮我批准"), "assist"), ChatOption("access/full", copy("access.full", "完全访问"), "full")),
                 when (settings.access) { AgentAccessMode.FULL -> "access/full"; AgentAccessMode.ASSISTED -> "access/assist"; else -> "access/ask" }, ChatControlKind.ACCESS)) + reasoningControl(settings),
-        approval = pending?.let { ChatApproval("请求批准", "resume", "discard-review", it.summary.take(4000),
+        approval = pending?.let { ChatApproval(copy("chat.approval", "请求批准"), "resume", "discard-review", it.summary.take(4000),
             if (it.token.isNotEmpty()) "review" else null) }, backgroundRunning = runner.running, imageAction = "attach-image", removeImageAction = "remove-image",
         draftImages = conversation?.draftImages.orEmpty().map { ChatImage(PluginResource(it.path), it.description) },
-        queueAction = "queue", queued = conversation?.queued.orEmpty().map { ChatQueuedMessage(it.id, it.text.take(1000).ifBlank { "附件消息" }, "queue-remove/" + it.id, "queue-front/" + it.id, "queue-steer/" + it.id, "queue-order") },
+        queueAction = "queue", queued = conversation?.queued.orEmpty().map { ChatQueuedMessage(it.id, it.text.take(1000).ifBlank { copy("chat.attachment", "附件消息") }, "queue-remove/" + it.id, "queue-front/" + it.id, "queue-steer/" + it.id, "queue-order") },
         historyAction = "load-earlier", historyTotal = all.size, fileAction = "attach-file", removeFileAction = "remove-file",
         draftFiles = conversation?.draftFiles.orEmpty().map { it.chatFile() },
         voiceInputAction = "send-voice".takeIf { context.recognitionServiceId != null })

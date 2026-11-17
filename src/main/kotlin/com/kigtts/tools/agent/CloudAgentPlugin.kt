@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.27")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.29")
     override val localization = PluginLocalization("zh-CN", listOf("zh-CN", "zh-CN-x-casual", "en", "ko", "ja"))
     private var strings = PluginStrings(emptyMap())
     private lateinit var environment: PluginEnvironment
@@ -52,8 +52,8 @@ class CloudAgentPlugin : KigPlugin {
         val badge = if (::taskBadges.isInitialized) taskBadges.badge() else null
         return PluginContributions(actions = if (this::runner.isInitialized && (runner.running || store.settings.pinHomeIcon || badge != null))
         listOf(UiAction("open", copy("plugin.title", "AI 助手"), UiSlot.HEADER_END, PluginIcon.ROBOT2, busy = runner.running, badge = badge)) else emptyList(), settingsEntries = listOf(
-        SettingsEntry("assistant", copy("plugin.title", "AI 助手"), "chat", PluginIcon.ROBOT2, cardId = "assistant", cardTitle = copy("entry.assistant", "助手"), summary = copy("entry.chat", "聊天与创作"), badge = badge),
-        SettingsEntry("settings", copy("entry.settings", "助手设置"), "settings", PluginIcon.SETTINGS, cardId = "assistant", cardTitle = copy("entry.assistant", "助手"), summary = copy("entry.settings.summary", "服务、模型与密钥"), order = 1)),
+        SettingsEntry("assistant", copy("plugin.title", "AI 助手"), "chat", PluginIcon.ROBOT2, cardId = "assistant", cardTitle = copy("entry.assistant", "AI 助手"), summary = copy("entry.chat", "聊天与创作"), badge = badge),
+        SettingsEntry("settings", copy("entry.settings", "助手设置"), "settings", PluginIcon.SETTINGS, cardId = "assistant", cardTitle = copy("entry.assistant", "AI 助手"), summary = copy("entry.settings.summary", "服务、模型与密钥"), order = 1)),
         automationActions = listOf("open"))
     }
     override fun page(pageId: String, context: PluginContext) = searchSettings.decorate(searchSettings.page(pageId) ?: agentPage(pageId, store, runner, secrets, context) { key, fallback -> strings.text(key, context.locale, fallback = fallback) })

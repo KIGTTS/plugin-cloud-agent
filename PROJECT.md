@@ -106,3 +106,7 @@
 - AI assistant catalogs now declare the app-supported locales and localize the entry, model/access controls, and composer placeholder.
 - The chat composer keeps model and permission chips at the bottom, sends with the keyboard Send action, and exposes a hold-to-speak microphone button only while a recognition service is available.
 - Voice recognition text is submitted to the active AI conversation after release; the same control stays hidden when recognition is unavailable.
+
+## 2026-11-18 内置 AI 助手
+- 0.9.29 随主程序实验功能提供；会话列表、聊天顶栏、权限操作及连接设置增加英日韩文案。保留原包 ID 与会话数据目录，名称保持 AI 助手。
+
