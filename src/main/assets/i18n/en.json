@@ -1,0 +1,14 @@
+{
+  "plugin.title": "AI assistant",
+  "entry.assistant": "Assistant",
+  "entry.chat": "Chat and create",
+  "entry.settings": "Assistant settings",
+  "entry.settings.summary": "Services, models and keys",
+  "chat.placeholder": "Message or hold to speak",
+  "control.provider": "Provider",
+  "control.model": "Model",
+  "control.access": "Access",
+  "access.ask": "Ask every time",
+  "access.assist": "Help me approve",
+  "access.full": "Full access"
+}

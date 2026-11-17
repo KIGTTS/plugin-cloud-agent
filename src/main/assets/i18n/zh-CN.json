@@ -1,0 +1,14 @@
+{
+  "plugin.title": "AI 助手",
+  "entry.assistant": "助手",
+  "entry.chat": "聊天与创作",
+  "entry.settings": "助手设置",
+  "entry.settings.summary": "服务、模型与密钥",
+  "chat.placeholder": "发送消息或按住说话",
+  "control.provider": "供应商",
+  "control.model": "模型",
+  "control.access": "权限",
+  "access.ask": "手动审核",
+  "access.assist": "帮我批准",
+  "access.full": "完全访问"
+}

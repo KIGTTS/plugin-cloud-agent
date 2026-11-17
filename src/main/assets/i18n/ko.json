@@ -1,0 +1,14 @@
+{
+  "plugin.title": "AI 어시스턴트",
+  "entry.assistant": "어시스턴트",
+  "entry.chat": "대화 및 창작",
+  "entry.settings": "어시스턴트 설정",
+  "entry.settings.summary": "서비스, 모델 및 키",
+  "chat.placeholder": "메시지를 보내거나 길게 눌러 말하기",
+  "control.provider": "제공업체",
+  "control.model": "모델",
+  "control.access": "권한",
+  "access.ask": "매번 확인",
+  "access.assist": "승인 도우미",
+  "access.full": "전체 액세스"
+}

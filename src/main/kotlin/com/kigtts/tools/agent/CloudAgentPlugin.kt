@@ -9,6 +9,8 @@ import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
     override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.27")
+    override val localization = PluginLocalization("zh-CN", listOf("zh-CN", "zh-CN-x-casual", "en", "ko", "ja"))
+    private var strings = PluginStrings(emptyMap())
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
@@ -25,6 +27,7 @@ class CloudAgentPlugin : KigPlugin {
     private fun changed() { uiSignals.changed() }
     override suspend fun attach(environment: PluginEnvironment) {
         this.environment = environment
+        strings = PluginStrings.fromAssets(environment.assets)
         store = AgentStore(environment.storage)
         if (store.settings.access == AgentAccessMode.FULL && !store.settings.fullAccessConfirmed)
             store.updateSettings { it.copy(access = AgentAccessMode.REQUEST_APPROVAL) }
@@ -43,15 +46,17 @@ class CloudAgentPlugin : KigPlugin {
         if (store.settings.access == AgentAccessMode.FULL && store.settings.toolsEnabled)
             store.list().mapNotNull { store.pendingFor(it.id) }.forEach { reviews.resume(it.conversationId) }
     }
-    override val contributions get(): PluginContributions {
+    override val contributions get(): PluginContributions = contributions(PluginContext("", ""))
+    override fun contributions(context: PluginContext): PluginContributions {
+        fun copy(key: String, fallback: String) = strings.text(key, context.locale, fallback = fallback)
         val badge = if (::taskBadges.isInitialized) taskBadges.badge() else null
         return PluginContributions(actions = if (this::runner.isInitialized && (runner.running || store.settings.pinHomeIcon || badge != null))
-        listOf(UiAction("open", "AI 助手", UiSlot.HEADER_END, PluginIcon.ROBOT2, busy = runner.running, badge = badge)) else emptyList(), settingsEntries = listOf(
-        SettingsEntry("assistant", "AI 助手", "chat", PluginIcon.ROBOT2, cardId = "assistant", cardTitle = "助手", summary = "聊天与创作", badge = badge),
-        SettingsEntry("settings", "助手设置", "settings", PluginIcon.SETTINGS, cardId = "assistant", cardTitle = "助手", summary = "服务、模型与密钥", order = 1)),
+        listOf(UiAction("open", copy("plugin.title", "AI 助手"), UiSlot.HEADER_END, PluginIcon.ROBOT2, busy = runner.running, badge = badge)) else emptyList(), settingsEntries = listOf(
+        SettingsEntry("assistant", copy("plugin.title", "AI 助手"), "chat", PluginIcon.ROBOT2, cardId = "assistant", cardTitle = copy("entry.assistant", "助手"), summary = copy("entry.chat", "聊天与创作"), badge = badge),
+        SettingsEntry("settings", copy("entry.settings", "助手设置"), "settings", PluginIcon.SETTINGS, cardId = "assistant", cardTitle = copy("entry.assistant", "助手"), summary = copy("entry.settings.summary", "服务、模型与密钥"), order = 1)),
         automationActions = listOf("open"))
     }
-    override fun page(pageId: String, context: PluginContext) = searchSettings.decorate(searchSettings.page(pageId) ?: agentPage(pageId, store, runner, secrets))
+    override fun page(pageId: String, context: PluginContext) = searchSettings.decorate(searchSettings.page(pageId) ?: agentPage(pageId, store, runner, secrets, context) { key, fallback -> strings.text(key, context.locale, fallback = fallback) })
     override suspend fun execute(actionId: String, context: PluginContext): PluginOutcome {
         val value = context.inputs["value"].orEmpty()
         try {
@@ -151,8 +156,8 @@ class CloudAgentPlugin : KigPlugin {
                     else store.loadEarlier(conversation.id, requireNotNull(context.inputs["before"]).toInt())
                     PluginOutcome.RefreshUi
                 }
-                actionId == "send" -> {
-                    val text = context.inputs["message"] ?: context.inputs["text"] ?: value
+                actionId == "send" || actionId == "send-voice" -> {
+                    val text = context.inputs["message"] ?: context.inputs["text"] ?: context.inputs["voiceText"] ?: value
                     val conversation = store.target(context) ?: store.create()
                     store.latestHistory(conversation.id)
                     runner.send(conversation.id, text); PluginOutcome.RefreshUi

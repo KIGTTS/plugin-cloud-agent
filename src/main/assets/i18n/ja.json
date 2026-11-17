@@ -1,0 +1,14 @@
+{
+  "plugin.title": "AI アシスタント",
+  "entry.assistant": "アシスタント",
+  "entry.chat": "チャットと作成",
+  "entry.settings": "アシスタント設定",
+  "entry.settings.summary": "サービス、モデル、キー",
+  "chat.placeholder": "メッセージを送るか、長押しして話す",
+  "control.provider": "プロバイダー",
+  "control.model": "モデル",
+  "control.access": "権限",
+  "access.ask": "毎回確認",
+  "access.assist": "承認を手伝う",
+  "access.full": "完全アクセス"
+}
