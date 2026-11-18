@@ -11,7 +11,8 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
     private val tools: AgentTools, private val changed: () -> Unit,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val boundConversation: String? = null,
-    private val taskChanged: (String, Boolean) -> Unit = { _, _ -> }) {
+    private val taskChanged: (String, Boolean) -> Unit = { _, _ -> },
+    private val copyForCurrentLocale: () -> (String, String) -> String = { sourceAgentCopy }) {
     @Volatile private var queuePaused = false
     @Volatile private var active: Job? = null
     @Volatile private var activeConversation: String? = null
@@ -20,7 +21,7 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
     open val running get() = active != null
     open fun isRunning(id: String) = running && runningConversation == id
     @Synchronized open fun send(conversationId: String, text: String) {
-        check(!running) { "请先停止当前回答" }; check(store.pendingFor(conversationId) == null) { "请先完成或取消待审核操作" }
+        check(!running) { "请先停止当前回答" }; check(store.pendingFor(conversationId) == null) { throw AgentUiFailure(AgentNotice("runner.pending", "请先完成或取消待审核操作")) }
         require((text.isNotBlank() || (store.get(conversationId)?.let { it.draftImages.isNotEmpty() || it.draftFiles.isNotEmpty() } == true)) && text.length <= 32 * 1024)
         val settings = store.connection(requireNotNull(store.get(conversationId)))
         val profile = settings.effectiveProfile(); apiEndpoint(profile)
@@ -29,10 +30,10 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
         // conversations and migrations do not become dead ends.
         check(secrets.exists(settings) && profile.model.isNotBlank()) { "暂无可用模型，请先在供应商配置中填写 API 密钥并刷新模型列表" }
         if (profile.models.isNotEmpty()) check(selectedModelIsAvailable(store, secrets, settings)) { "请选择可用模型" }
-        check(openCodeChatModel(settings.provider, profile.model)) { "此 OpenCode 模型使用尚未支持的协议，请在会话弹窗选择兼容模型" }
+        check(openCodeChatModel(settings.provider, profile.model)) { throw AgentUiFailure(AgentNotice("runner.open_code", "此 OpenCode 模型使用尚未支持的协议，请在会话弹窗选择兼容模型")) }
         val conversation = requireNotNull(store.get(conversationId))
         queuePaused = false
-        store.save(conversation.copy(title = if (conversation.messages.isEmpty()) text.trim().take(36).ifBlank { "附件会话" } else conversation.title, draftImages = emptyList(), draftFiles = emptyList()))
+        store.save(conversation.copy(title = if (conversation.messages.isEmpty()) text.trim().take(36).ifBlank { copyForCurrentLocale()("runner.attachments", "附件会话") } else conversation.title, draftImages = emptyList(), draftFiles = emptyList()))
         store.message(conversationId, AgentMessage(role = "user", content = text.trim(), images = conversation.draftImages, files = conversation.draftFiles))
         launch(conversationId, settings)
     }
@@ -43,9 +44,9 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
     }
     @Synchronized open fun approve(pending: PendingReview) {
         check(!running)
-        check(store.settings.toolsEnabled) { "请先开启允许操作软件" }
+        check(store.settings.toolsEnabled) { throw AgentUiFailure(AgentNotice("runner.tools_disabled", "请先开启允许操作软件")) }
         val call = requireNotNull(pending.call)
-        store.setPending(pending.copy(kind = ReviewKind.EXTERNAL, call = null, summary = "操作可能已经执行，请先检查状态后继续"))
+        store.setPending(pending.copy(kind = ReviewKind.EXTERNAL, call = null, summary = copyForCurrentLocale()("runner.check_operation", "操作可能已经执行，请先检查状态后继续")))
         launch(pending.conversationId, store.connection(requireNotNull(store.get(pending.conversationId))), call)
     }
     private fun launch(id: String, settings: AgentSettings, approved: ToolCall? = null) {
@@ -62,7 +63,7 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
                     }).forAccess(store.settings.access)
                     store.message(id, AgentMessage(role = "tool", content = reply.content, toolCallId = approved.id))
                     if (reply.pause) {
-                        store.setPending(PendingReview(id, approved.id, reply.reviewToken.orEmpty(), reply.summary ?: "操作需要进一步确认", kind = reply.reviewKind))
+                        store.setPending(PendingReview(id, approved.id, reply.reviewToken.orEmpty(), reply.summary ?: copyForCurrentLocale()("runner.review", "操作需要进一步确认"), kind = reply.reviewKind))
                         return@launch
                     }
                     store.setPending(null, id)
@@ -154,7 +155,7 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
                             break
                         }
                         if (reply.pause) {
-                            val summary = reply.summary ?: if (reply.reviewToken != null) "变更需要你的审核" else "草稿已送交审核，完成后可以继续"
+                            val summary = reply.summary ?: if (reply.reviewToken != null) copyForCurrentLocale()("runner.review_change", "变更需要你的审核") else copyForCurrentLocale()("runner.review_draft", "草稿已送交审核，完成后可以继续")
                             store.setPending(PendingReview(id, call.id, reply.reviewToken.orEmpty(), summary,
                                 kind = reply.reviewKind, transactionId = reply.transactionId))
                             // Complete every call/result pair without running subsequent mutations after review is requested.
@@ -171,7 +172,7 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
                     val key = visionModelKey(settings)
                     if (store.get(id)?.visionUnavailableModel == key) throw unsupported
                     store.modify(id) { it.copy(visionUnavailableModel = key) }
-                    store.message(id, AgentMessage(role = "assistant", content = "当前模型不接受图片，图片已保留。可以继续搜索和保存素材；需要查看图片时，请切换支持视觉的模型。"))
+                    store.message(id, AgentMessage(role = "assistant", content = copyForCurrentLocale()("runner.vision", "当前模型不接受图片，图片已保留。可以继续搜索和保存素材；需要查看图片时，请切换支持视觉的模型。")))
                     changed()
                 } catch (overflow: AgentContextOverflow) {
                     store.message(id, message.copy(state = MessageState.CANCELLED))
@@ -187,14 +188,19 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
                         else completeUnansweredCalls(id, message)
                         changed(); return
                     }
-                    store.message(id, message.copy(content = message.content.ifBlank { error.message?.take(240) ?: "回答中断，请稍后重试" }, state = MessageState.FAILED)); changed(); return
+                    store.message(id, message.copy(content = message.content.ifBlank { failureText(error, "runner.interrupted", "回答中断，请稍后重试") }, state = MessageState.FAILED)); changed(); return
                 }
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) {
-            store.message(id, AgentMessage(role = "assistant", content = error.message?.take(240) ?: "暂时无法连接", state = MessageState.FAILED)); changed()
+            store.message(id, AgentMessage(role = "assistant", content = failureText(error, "runner.connection", "暂时无法连接"), state = MessageState.FAILED)); changed()
         }
     }
+    private fun failureText(error: Exception, key: String, fallback: String): String {
+        val copy = copyForCurrentLocale()
+        return if (error is AgentUiFailure) error.notice.render(copy) else copy(key, fallback)
+    }
+
     private fun completeUnansweredCalls(id: String, message: AgentMessage) {
         val answered = store.get(id)?.messages.orEmpty().filter { it.state == MessageState.COMPLETE }.mapNotNull { it.toolCallId }.toSet()
         message.calls.filter { it.id !in answered }.forEach { call ->
@@ -203,9 +209,9 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
         }
     }
     @Synchronized open fun enqueue(id: String, text: String, interrupt: Boolean = false) {
-        check(store.pendingFor(id) == null) { "请先处理待批准或结果待核对的操作" }
+        check(store.pendingFor(id) == null) { throw AgentUiFailure(AgentNotice("runner.check_queue", "请先处理待批准或结果待核对的操作")) }
         val conversation = requireNotNull(store.get(id)); require(text.isNotBlank() || (conversation.draftImages.isNotEmpty() || conversation.draftFiles.isNotEmpty()))
-        require(text.length <= 32000 && conversation.queued.size < 20) { "待发送消息过多" }
+        require(text.length <= 32000 && conversation.queued.size < 20) { throw AgentUiFailure(AgentNotice("runner.queue_limit", "待发送消息过多")) }
         val item = AgentQueuedMessage(text = text, images = conversation.draftImages, files = conversation.draftFiles, priority = interrupt, createdAt = if (interrupt) nextPriorityTime() else System.currentTimeMillis())
         store.modify(id) { current -> current.copy(draftImages = emptyList(), draftFiles = emptyList(), queued = if (interrupt) listOf(item) + current.queued else current.queued + item) }
         queuePaused = false; changed()
@@ -219,13 +225,13 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
     @Synchronized open fun reorderQueue(id: String, order: List<String>) {
         store.modify(id) { current ->
             val items = current.queued.associateBy { it.id }
-            require(order.size == items.size && order.distinct().size == order.size && order.toSet() == items.keys) { "队列已更新，请重新排序" }
+            require(order.size == items.size && order.distinct().size == order.size && order.toSet() == items.keys) { throw AgentUiFailure(AgentNotice("runner.queue_order", "队列已更新，请重新排序")) }
             current.copy(queued = order.map { items.getValue(it) })
         }; changed()
     }
     @Synchronized open fun steerQueued(id: String, messageId: String) {
-        check(store.pendingFor(id) == null) { "请先处理待批准或结果待核对的操作" }
-        val item = requireNotNull(store.get(id)?.queued?.firstOrNull { it.id == messageId }) { "此消息已离开队列" }
+        check(store.pendingFor(id) == null) { throw AgentUiFailure(AgentNotice("runner.check_queue", "请先处理待批准或结果待核对的操作")) }
+        val item = requireNotNull(store.get(id)?.queued?.firstOrNull { it.id == messageId }) { throw AgentUiFailure(AgentNotice("runner.queue_gone", "此消息已离开队列")) }
         val wasRunning = running
         store.modify(id) { it.copy(queued = listOf(item.copy(priority = true, createdAt = nextPriorityTime())) + it.queued.filterNot { queued -> queued.id == messageId }) }
         queuePaused = false; changed()
@@ -238,7 +244,7 @@ open class AgentRunner(private val store: AgentStore, private val secrets: Agent
             .mapNotNull { conversation -> conversation.queued.firstOrNull()?.let { conversation.id to it } }
             .sortedWith(compareByDescending<Pair<String, AgentQueuedMessage>> { it.second.priority }.thenBy { it.second.createdAt }).firstOrNull() ?: return
         val conversation = requireNotNull(store.get(next.first))
-        store.modify(conversation.id) { current -> current.copy(queued = current.queued.filterNot { it.id == next.second.id }, title = if (current.messages.isEmpty()) next.second.text.take(36).ifBlank { "附件会话" } else current.title) }
+        store.modify(conversation.id) { current -> current.copy(queued = current.queued.filterNot { it.id == next.second.id }, title = if (current.messages.isEmpty()) next.second.text.take(36).ifBlank { copyForCurrentLocale()("runner.attachments", "附件会话") } else current.title) }
         store.message(conversation.id, AgentMessage(role = "user", content = next.second.text, images = next.second.images, files = next.second.files))
         launch(conversation.id, store.connection(conversation))
     }

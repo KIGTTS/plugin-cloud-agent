@@ -4,14 +4,16 @@ import com.kigtts.plugin.api.*
 import kotlinx.serialization.json.*
 import java.util.UUID
 
-internal class AgentBrowser(private val environment: PluginEnvironment, private val web: AgentWebAccess = AgentWebAccess()) {
+internal class AgentBrowser(private val environment: PluginEnvironment, private val web: AgentWebAccess = AgentWebAccess(),
+    private val copyForCurrentLocale: () -> AgentCopy = { sourceAgentCopy }) {
     suspend fun execute(args: JsonObject): ToolResult {
         val operation = args.string("operation")
         if (operation == "search" || operation == "fetch") {
             environment.requirePermission("network")
             return if (operation == "search") web.search(args.string("query")) else web.fetch(args.string("url"))
         }
-        val broker = requireNotNull(environment.appBroker)
+        val copy = copyForCurrentLocale()
+        val broker = environment.appBroker ?: throw AgentUiFailure(AgentNotice("browser.unavailable", "当前无法使用后台浏览器"))
         val dimensions = if (operation in setOf("open", "open-subtitle")) browserDeviceSize(args, broker) else 960 to 1280
         val path = if (operation == "screenshot") "workspace/screenshots/${UUID.randomUUID()}.png" else null
         val input = when (operation) {
@@ -27,9 +29,15 @@ internal class AgentBrowser(private val environment: PluginEnvironment, private 
             args["x"]?.jsonPrimitive?.floatOrNull, args["y"]?.jsonPrimitive?.floatOrNull, args["deltaY"]?.jsonPrimitive?.floatOrNull ?: 0f,
             args["waitMs"]?.jsonPrimitive?.intOrNull ?: 800, args["timeoutMs"]?.jsonPrimitive?.intOrNull ?: 15000, path)
         val reply = broker.request(command)
-        if (reply is AppReply.Failure) return ToolResult(buildJsonObject { put("ok", false); put("code", reply.code); put("error", reply.message) }.toString())
+        if (reply is AppReply.Failure) return ToolResult(buildJsonObject {
+            put("ok", false)
+            put("code", reply.code)
+            put("error", if (reply.code == "SESSION_EXPIRED") copy("browser.expired", "浏览器会话已失效，请重新打开页面")
+                else copy("browser.failed", "浏览器操作未完成"))
+            put("diagnostic", reply.message)
+        }.toString())
         val data = (reply as AppReply.Data).value
-        return ToolResult(data.toString(), images = if (path != null) listOf(AgentImages(environment.storage).prepare(path, "独立浏览器实际运行界面")) else emptyList())
+        return ToolResult(data.toString(), images = if (path != null) listOf(AgentImages(environment.storage).prepare(path, copy("browser.screenshot", "独立浏览器实际运行界面"))) else emptyList())
     }
 }
 

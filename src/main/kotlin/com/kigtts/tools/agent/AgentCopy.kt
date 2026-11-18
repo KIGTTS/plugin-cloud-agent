@@ -11,3 +11,5 @@ internal data class AgentNotice(val key: String, val fallback: String, val argum
 }
 
 internal class ModelCatalogFailure(val notice: AgentNotice) : IllegalStateException(notice.render(sourceAgentCopy))
+
+internal class AgentUiFailure(val notice: AgentNotice) : IllegalArgumentException(notice.render(sourceAgentCopy))

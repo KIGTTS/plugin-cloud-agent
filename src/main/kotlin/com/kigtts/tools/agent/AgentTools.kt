@@ -10,7 +10,8 @@ data class ToolResult(val content: String, val reviewToken: String? = null, val 
 
 /** Data contracts are decoded by the SDK, so calls cannot invent owners or bypass host permissions. */
 class AgentTools(private val environment: PluginEnvironment, private val historyReader: () -> Conversation? = { null },
-    webSettings: () -> AgentSettings = { AgentSettings() }, webSecrets: AgentSecrets? = null, private val fullAccess: () -> Boolean = { false }) {
+    webSettings: () -> AgentSettings = { AgentSettings() }, webSecrets: AgentSecrets? = null,
+    copyForCurrentLocale: () -> (String, String) -> String = { sourceAgentCopy }, private val fullAccess: () -> Boolean = { false }) {
     private val stickers = AgentStickerTools(environment, ::resource, ::scopedPath)
     private val files = AgentFiles(environment.storage, ::scopedPath)
     private val pages = AgentPageTools(environment)
@@ -21,7 +22,7 @@ class AgentTools(private val environment: PluginEnvironment, private val history
     private val downloads = AgentDownload(environment)
     private val media = AgentMediaTools(environment)
     private val web = AgentWebAccess(webSettings, webSecrets)
-    private val browser = AgentBrowser(environment, web)
+    private val browser = AgentBrowser(environment, web, copyForCurrentLocale)
     private val imageTools = AgentImageTools(environment)
     private val imageEditing = AgentImageEditing(environment)
     private val vectorEditing = AgentVectorEditing(environment)

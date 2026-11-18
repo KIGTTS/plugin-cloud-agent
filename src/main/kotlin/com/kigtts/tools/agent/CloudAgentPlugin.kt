@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.30")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.31")
     override val localization = PluginLocalization("zh-CN", listOf("zh-CN", "zh-CN-x-casual", "en", "ko", "ja"))
     private var strings = PluginStrings(emptyMap())
     private fun copyFor(locale: String): AgentCopy = { key, fallback -> strings.text(key, locale, fallback = fallback) }
@@ -36,7 +36,7 @@ class CloudAgentPlugin : KigPlugin {
         secrets = KeystoreAgentSecrets(environment.storage)
         notifications = AgentTaskNotifications(store, environment, copyFor = ::copyFor)
         taskBadges = AgentTaskBadges(store, environment.storage)
-        runner = ConcurrentAgentRunner(store, secrets, environment, ::changed) { id, running ->
+        runner = ConcurrentAgentRunner(store, secrets, environment, ::changed, ::copyFor) { id, running ->
             taskBadges.changed(id, running); notifications.changed(id, running)
         }
         reviews = AgentReviewController(environment, store, runner)
@@ -66,7 +66,7 @@ class CloudAgentPlugin : KigPlugin {
         val copy = copyFor(context.locale)
         val value = context.inputs["value"].orEmpty()
         try {
-            AgentFileActions(environment, store).handle(actionId, context)?.let { changed(); return it }
+            AgentFileActions(environment, store, copy).handle(actionId, context)?.let { changed(); return it }
             searchSettings.handle(actionId, value, copy)?.let { outcome ->
                 if (actionId.startsWith("search-offer/chat-viewed/")) taskBadges.viewed(actionId.removePrefix("search-offer/chat-viewed/"))
                 changed(); return outcome
@@ -115,7 +115,7 @@ class CloudAgentPlugin : KigPlugin {
                     check(!runner.isRunning(id)) { copy("chat.stop_before_edit", "请先停止此会话的回答") }
                     val conversation = requireNotNull(store.get(id)) { copy("chat.gone", "会话不存在") }
                     PluginOutcome.Confirm(copy("chat.delete_title", "删除会话？"), strings.text("chat.delete_body", context.locale, mapOf("name" to conversation.title)),
-                        PageAction("delete-confirm/$id", copy("chat.delete", "删除"), PluginIcon.NONE, symbol = "delete"))
+                        PageAction("delete-confirm/$id", copy("chat.delete", "删除"), PluginIcon.NONE, symbol = "delete"), copy("chat.cancel", "取消"))
                 }
                 actionId.startsWith("delete-confirm/") -> {
                     val id = actionId.removePrefix("delete-confirm/")
@@ -214,7 +214,8 @@ class CloudAgentPlugin : KigPlugin {
                 else -> PluginOutcome.Message(copy("chat.unknown_action", "未知助手操作"))
             }
             changed(); return result
-        } catch (error: IllegalArgumentException) { return PluginOutcome.Message(error.message?.take(200) ?: copy("chat.invalid_input", "请检查输入内容")) }
+        } catch (error: AgentUiFailure) { return PluginOutcome.Message(error.notice.render(copy)) }
+        catch (error: IllegalArgumentException) { return PluginOutcome.Message(error.message?.take(200) ?: copy("chat.invalid_input", "请检查输入内容")) }
         catch (error: IllegalStateException) {
             return when (error.message) {
                 "请选择可用模型" -> PluginOutcome.Dialog(copy("model.choose", "选择模型"), copy("chat.model_required", "请选择可用模型"))

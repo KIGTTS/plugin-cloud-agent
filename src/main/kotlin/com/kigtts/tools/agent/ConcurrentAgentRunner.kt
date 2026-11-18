@@ -6,14 +6,16 @@ import java.util.concurrent.ConcurrentHashMap
 /** Every conversation owns its transport, queue, tool/browser state, compactor and history reader. */
 internal class ConcurrentAgentRunner(private val store: AgentStore, secrets: AgentSecrets,
     private val environment: PluginEnvironment, private val notify: () -> Unit,
+    private val copyFor: (String) -> AgentCopy = { sourceAgentCopy },
     private val taskChanged: (String, Boolean) -> Unit = { _, _ -> }) : AgentRunner(store, secrets,
     HttpsChatTransport { environment.requirePermission("network") }, AgentTools(environment, webSettings = { store.settings }, webSecrets = secrets), notify) {
     private val keys = secrets
     private val sessions = ConcurrentHashMap<String, AgentRunner>()
     private fun session(id: String) = sessions.computeIfAbsent(id) {
         AgentRunner(store, keys, HttpsChatTransport { environment.requirePermission("network") },
-            AgentTools(environment, historyReader = { store.get(id) }, webSettings = { store.settings }, webSecrets = keys) { store.settings.access == AgentAccessMode.FULL },
-            notify, boundConversation = id, taskChanged = taskChanged)
+            AgentTools(environment, historyReader = { store.get(id) }, webSettings = { store.settings }, webSecrets = keys,
+                copyForCurrentLocale = { copyFor(environment.locale) }) { store.settings.access == AgentAccessMode.FULL },
+            notify, boundConversation = id, taskChanged = taskChanged, copyForCurrentLocale = { copyFor(environment.locale) })
     }
     override val running get() = sessions.values.any { it.running }
     override val runningConversation get() = store.selected()?.id?.takeIf(::isRunning)

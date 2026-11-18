@@ -22,7 +22,7 @@ internal const val AGENT_MESSAGE_FILE_LIMIT = 128L * 1024 * 1024
 internal class AgentFiles(private val storage: PluginStorage, private val scope: (String) -> String) {
     fun reference(path: String): AgentFile {
         val file = storage.file(scope(path))
-        require(file.isFile && file.length() <= AGENT_FILE_LIMIT) { "文件不存在或超过64MB" }
+        require(file.isFile && file.length() <= AGENT_FILE_LIMIT) { throw AgentUiFailure(AgentNotice("chat.file_unreadable", "文件不存在或超过64MB")) }
         return AgentFile(path, file.name, file.length(), fileMime(file.extension))
     }
     fun inspect(path: String): JsonObject {
