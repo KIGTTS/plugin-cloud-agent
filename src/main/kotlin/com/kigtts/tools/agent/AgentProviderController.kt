@@ -6,7 +6,7 @@ import com.kigtts.plugin.api.*
 internal class AgentProviderController(private val store: AgentStore, private val secrets: AgentSecrets,
     private val runner: AgentRunner, private val catalog: AgentModelCatalog) {
     private fun pickerConnection() = store.modelPickerConversation?.let(store::get)?.let(store::connection) ?: store.settings.configuredConnection()
-    fun handle(action: String, context: PluginContext): PluginOutcome? {
+    fun handle(action: String, context: PluginContext, copy: AgentCopy = sourceAgentCopy): PluginOutcome? {
         val value = context.inputs["value"].orEmpty()
         when {
             action.startsWith("configure-provider/") -> {
@@ -28,11 +28,11 @@ internal class AgentProviderController(private val store: AgentStore, private va
             action == "add-provider" -> { require(store.settings.customProviders.size < 20); return PluginOutcome.OpenPage("provider-templates") }
             action.startsWith("add-template/") -> {
                 require(store.settings.customProviders.size < 20)
-                val template = providerTemplates.firstOrNull { it.id == action.substringAfter('/') } ?: error("供应商模板不存在")
-                if (template.id == "custom") return PluginOutcome.TextInput("供应商名称", "add-provider-save")
+                val template = providerTemplates.firstOrNull { it.id == action.substringAfter('/') } ?: error(copy("provider.template_missing", "供应商模板不存在"))
+                if (template.id == "custom") return PluginOutcome.TextInput(copy("provider.name", "供应商名称"), "add-provider-save")
                 val custom = CustomProvider(name = uniqueProviderName(template.label, store.settings.customProviders), profile = ProviderProfile(template.endpoint, template.model, apiFormat = template.apiFormat, codexDeviceLogin = template.codexDeviceLogin))
                 store.updateSettings { it.copy(provider = Provider.CUSTOM, customProviderId = custom.id, customProviders = it.customProviders + custom) }
-                return if (template.codexDeviceLogin) PluginOutcome.TextInput("Codex 设备代码登录令牌", "codex-device-save/${custom.id}", secret = true)
+                return if (template.codexDeviceLogin) PluginOutcome.TextInput(copy("provider.codex_token", "Codex 设备代码登录令牌"), "codex-device-save/${custom.id}", secret = true)
                 else PluginOutcome.OpenPage("connection-settings")
             }
             action == "add-provider-save" -> {
@@ -51,35 +51,40 @@ internal class AgentProviderController(private val store: AgentStore, private va
                 val id = action.substringAfter('/'); require(store.settings.customProviders.any { it.id == id })
                 store.updateSettings { it.copy(provider = Provider.CUSTOM, customProviderId = id) }; return PluginOutcome.OpenPage("connection-settings")
             }
-            action.startsWith("remove-provider/") -> return PluginOutcome.Menu("删除此供应商配置？", listOf(PageAction("remove-provider-confirm/" + action.substringAfter('/'), "删除配置和密钥", PluginIcon.CLOSE)))
+            action.startsWith("remove-provider/") -> return PluginOutcome.Menu(copy("provider.delete_title", "删除此供应商配置？"), listOf(PageAction("remove-provider-confirm/" + action.substringAfter('/'), copy("provider.delete_key", "删除配置和密钥"), PluginIcon.CLOSE)))
             action.startsWith("remove-provider-confirm/") -> {
                 val id = action.substringAfter('/'); require(store.settings.customProviders.any { it.id == id })
-                check(store.list().none { runner.isRunning(it.id) && store.connection(it).customProviderId == id }) { "请先停止正在使用此供应商的回答" }
+                check(store.list().none { runner.isRunning(it.id) && store.connection(it).customProviderId == id }) { copy("provider.stop_reply", "请先停止正在使用此供应商的回答") }
                 secrets.writeCustom(id, "")
                 store.updateSettings { it.copy(customProviders = it.customProviders.filterNot { custom -> custom.id == id }, provider = if (it.customProviderId == id) Provider.DEEPSEEK else it.provider, customProviderId = it.customProviderId?.takeUnless { selected -> selected == id }) }
                 return PluginOutcome.RefreshUi
             }
-            action == "provider-name" -> return PluginOutcome.TextInput("供应商名称", "save-provider-name", store.settings.providerLabel())
+            action == "provider-name" -> return PluginOutcome.TextInput(copy("provider.name", "供应商名称"), "save-provider-name", store.settings.providerLabel())
             action == "save-provider-name" -> {
                 require(value.trim().length in 1..80); val id = requireNotNull(store.settings.customProviderId)
-                require(store.settings.customProviders.none { it.id != id && it.name.trim().equals(value.trim(), true) }) { "已有同名供应商，请换个名称" }
+                require(store.settings.customProviders.none { it.id != id && it.name.trim().equals(value.trim(), true) }) { copy("provider.duplicate", "已有同名供应商，请换个名称") }
                 store.updateSettings { it.copy(customProviders = it.customProviders.map { custom -> if (custom.id == id) custom.copy(name = value.trim()) else custom }) }; return PluginOutcome.RefreshUi
             }
             action in setOf("endpoint", "key") -> {
                 val profile = store.settings.profile()
-                return PluginOutcome.TextInput(if (action == "endpoint") "服务地址" else "密钥", "save-$action", if (action == "endpoint") profile.endpoint else "", secret = action == "key")
+                return PluginOutcome.TextInput(if (action == "endpoint") copy("settings.endpoint", "服务地址") else copy("settings.key", "密钥"), "save-$action", if (action == "endpoint") profile.endpoint else "", secret = action == "key")
             }
             action in setOf("save-endpoint", "save-key") -> {
-                check(store.list().none { runner.isRunning(it.id) && store.connection(it).catalogKey() == store.settings.catalogKey() }) { "请先停止正在使用此连接的回答" }
+                check(store.list().none { runner.isRunning(it.id) && store.connection(it).catalogKey() == store.settings.catalogKey() }) { copy("provider.stop_connection", "请先停止正在使用此连接的回答") }
                 when (action) {
                     "save-key" -> secrets.write(store.settings, value)
-                    "save-endpoint" -> { completionEndpoint(value.trim()); store.changeProfile { it.copy(endpoint = value.trim(), modelsUpdatedAt = 0) } }
+                    "save-endpoint" -> {
+                        runCatching { completionEndpoint(value.trim()) }.getOrElse {
+                            throw IllegalArgumentException(copy("settings.https", "服务地址必须使用 HTTPS，并且不能包含账号、查询或片段"))
+                        }
+                        store.changeProfile { it.copy(endpoint = value.trim(), modelsUpdatedAt = 0) }
+                    }
                 }
                 catalog.refresh(store.settings.configuredConnection(), true)
                 return PluginOutcome.RefreshUi
             }
             action.startsWith("api-format/") -> {
-                val format = runCatching { ApiFormat.valueOf(action.substringAfter('/')) }.getOrElse { error("API 格式不受支持") }
+                val format = runCatching { ApiFormat.valueOf(action.substringAfter('/')) }.getOrElse { error(copy("provider.unsupported_api", "API 格式不受支持")) }
                 store.changeProfile { it.copy(apiFormat = format, modelsUpdatedAt = 0) }
                 catalog.refresh(store.settings.configuredConnection(), true)
                 return PluginOutcome.RefreshUi
@@ -93,7 +98,7 @@ internal class AgentProviderController(private val store: AgentStore, private va
             action == "models-manage" -> return PluginOutcome.OpenPage("connections")
             action == "models-next" -> { store.modelOffset += 40; return PluginOutcome.RefreshUi }
             action == "models-prev" -> { store.modelOffset = (store.modelOffset - 40).coerceAtLeast(0); return PluginOutcome.RefreshUi }
-            action == "model-search" -> return PluginOutcome.TextInput("搜索模型", "model-search-save", store.modelFilter)
+            action == "model-search" -> return PluginOutcome.TextInput(copy("model.search", "搜索模型"), "model-search-save", store.modelFilter)
             action == "model-search-save" -> { store.modelFilter = value.take(160); store.modelOffset = 0; return PluginOutcome.RefreshUi }
             action.startsWith("effort/") -> {
                 val conversation = store.target(context) ?: store.create(); val connection = store.connection(conversation)
@@ -107,7 +112,7 @@ internal class AgentProviderController(private val store: AgentStore, private va
                 val target = store.modelPickerConversation?.let(store::get) ?: if (chat) store.target(context) else null
                 var settings = target?.let(store::connection) ?: store.settings.configuredConnection()
                 val candidates = availableModels(store, secrets, settings)
-                val match = candidates.firstOrNull { modelAction(it.settings, it.id, chat) == action }?.let { it.settings to it.id } ?: error("模型列表已变化，请重新选择")
+                val match = candidates.firstOrNull { modelAction(it.settings, it.id, chat) == action }?.let { it.settings to it.id } ?: error(copy("model.changed", "模型列表已变化，请重新选择"))
                 settings = match.first; val chosen = match.second
                 if (target != null) {
                     val same = store.connection(target).catalogKey() == settings.catalogKey() && target.model == chosen

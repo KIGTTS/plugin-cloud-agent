@@ -34,12 +34,16 @@ internal val providerTemplates = listOf(
     ProviderTemplate("codex-device", "Codex · 设备代码登录", endpoint = "https://api.openai.com/v1", model = "gpt-4.1-mini", group = "Codex 设备代码", codexDeviceLogin = true),
 )
 
-internal fun providerTemplatesPage(): PluginPage {
+internal fun providerTemplatesPage(copy: AgentCopy = sourceAgentCopy): PluginPage {
     val groups = listOf("自定义供应商", "预设供应商", "Codex 设备代码")
     val blocks = groups.mapNotNull { group -> providerTemplates.filter { it.group == group }.takeIf { it.isNotEmpty() }?.let { templates ->
-        PageBlock.Group(group, templates.map { template ->
+        PageBlock.Group(when (group) {
+            "自定义供应商" -> copy("provider.custom", group)
+            "预设供应商" -> copy("provider.presets", group)
+            else -> copy("provider.codex_device", group)
+        }, templates.map { template ->
             PageBlock.Actions(listOf(PageAction("add-template/${template.id}", template.label, PluginIcon.ADD)))
         })
     } }
-    return PluginPage("provider-templates", "添加供应商", blocks)
+    return PluginPage("provider-templates", copy("settings.add_provider", "添加供应商"), blocks)
 }

@@ -31,3 +31,15 @@ internal fun deepSeekConnections(saved: AgentSettings): List<AgentSettings> =
     (listOf(saved) + saved.customProviders.map { saved.copy(provider = Provider.CUSTOM, customProviderId = it.id) } +
         Provider.entries.filter { it != Provider.CUSTOM }.map { saved.copy(provider = it, customProviderId = null) })
         .distinctBy { it.catalogKey() }.filter { !it.profile().codexDeviceLogin && isOfficialDeepSeek(it.profile().endpoint) }
+
+internal fun SearchSource.displayLabel(copy: AgentCopy) = when (this) {
+    SearchSource.BING -> copy("search.bing", label)
+    SearchSource.BOCHA -> copy("search.bocha", label)
+    else -> label
+}
+
+internal fun WebReadSource.displayLabel(copy: AgentCopy) = when (this) {
+    WebReadSource.AUTO -> copy("search.read_auto", label)
+    WebReadSource.DIRECT -> copy("search.read_direct", label)
+    WebReadSource.DEEPSEEK -> label
+}

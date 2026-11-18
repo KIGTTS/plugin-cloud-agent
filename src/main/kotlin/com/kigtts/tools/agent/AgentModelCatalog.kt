@@ -9,12 +9,12 @@ import javax.net.ssl.HttpsURLConnection
 internal fun modelsEndpoint(base: String) = openCodeCatalogEndpoint(base) ?: (completionEndpoint(base).removeSuffix("/chat/completions")
     .removeSuffix("/chat/completions").removeSuffix("/responses").removeSuffix("/messages") + "/models")
 internal fun parseModelCatalog(text: String): List<String> {
-    require(text.toByteArray().size <= 2 * 1024 * 1024) { "模型列表过大" }
+    if (!(text.toByteArray().size <= 2 * 1024 * 1024)) throw ModelCatalogFailure(AgentNotice("model.catalog_large", "模型列表过大"))
     val value = PluginJson.parseToJsonElement(text)
-    val array = if (value is JsonArray) value else value.jsonObject.let { it["data"] as? JsonArray ?: it["models"] as? JsonArray ?: (it["data"] as? JsonObject)?.get("models") as? JsonArray } ?: error("服务没有返回模型列表，请检查服务地址和密钥")
+    val array = if (value is JsonArray) value else value.jsonObject.let { it["data"] as? JsonArray ?: it["models"] as? JsonArray ?: (it["data"] as? JsonObject)?.get("models") as? JsonArray } ?: throw ModelCatalogFailure(AgentNotice("model.catalog_no_list", "服务没有返回模型列表，请检查服务地址和密钥"))
     val models = array.mapNotNull { item -> (item as? JsonPrimitive)?.contentOrNull ?: (item as? JsonObject)?.get("id")?.jsonPrimitive?.contentOrNull }
         .filter { it.length in 1..256 && it.none(Char::isISOControl) }.distinct().sorted().take(1000)
-    require(models.isNotEmpty()) { "服务没有返回可用模型，请检查账户的模型权限" }; return models
+    if (!(models.isNotEmpty())) throw ModelCatalogFailure(AgentNotice("model.catalog_no_models", "服务没有返回可用模型，请检查账户的模型权限")); return models
 }
 internal fun parseManualModels(value: String): List<String> {
     val items = if (value.trimStart().startsWith('[')) PluginJson.parseToJsonElement(value).jsonArray.map { if (it is JsonObject) it.getValue("id").jsonPrimitive.content else it.jsonPrimitive.content } else value.lines().map(String::trim).filter(String::isNotBlank)
@@ -48,16 +48,16 @@ internal class HttpsModelsTransport(private val beforeRequest: suspend () -> Uni
             connection.setRequestProperty("User-Agent", "KIGTTSNEXT-Agent/0.9.5")
             when (connection.responseCode) {
                 200 -> Unit
-                401, 403 -> error("密钥无效或无模型列表权限，已保留原列表")
-                404, 405 -> error("服务地址不支持获取模型列表，请检查地址")
-                else -> error("模型列表获取失败（${connection.responseCode}），已保留原列表")
+                401, 403 -> throw ModelCatalogFailure(AgentNotice("model.catalog_auth", "密钥无效或无模型列表权限，已保留原列表"))
+                404, 405 -> throw ModelCatalogFailure(AgentNotice("model.catalog_address", "服务地址不支持获取模型列表，请检查地址"))
+                else -> throw ModelCatalogFailure(AgentNotice("model.catalog_http", "模型列表获取失败（HTTP {code}），已保留原列表", mapOf("code" to connection.responseCode.toString())))
             }
             val bytes = connection.inputStream.use { input -> java.io.ByteArrayOutputStream().use { output ->
                 val buffer = ByteArray(8192); var total = 0
                 while (true) { val count = input.read(buffer); if (count < 0) break; total += count; require(total <= 2 * 1024 * 1024); output.write(buffer, 0, count) }
                 output.toByteArray()
             } }
-            require(bytes.size <= 2 * 1024 * 1024) { "模型列表过大" }
+            if (!(bytes.size <= 2 * 1024 * 1024)) throw ModelCatalogFailure(AgentNotice("model.catalog_large", "模型列表过大"))
             bytes.toString(Charsets.UTF_8).let { DiscoveredModels(parseModelCatalog(it), parseModelInfo(it)) }
         } finally { connection.disconnect() }
     }
@@ -69,12 +69,12 @@ internal class AgentModelCatalog(private val store: AgentStore, private val secr
     @Synchronized fun refresh(settings: AgentSettings, force: Boolean = false) {
         val key = settings.catalogKey(); val profile = settings.effectiveProfile()
         if (!secrets.exists(settings) || profile.endpoint.isBlank()) {
-            if (force) { store.modelStatus = store.modelStatus + (key to "请先填写此供应商的地址和密钥"); changed() }
+            if (force) { store.modelStatus = store.modelStatus + (key to AgentNotice("model.catalog_setup", "请先填写此供应商的地址和密钥")); changed() }
             return
         }
         if (!force && (jobs[key]?.isActive == true || System.currentTimeMillis() - profile.modelsUpdatedAt < 24 * 60 * 60 * 1000L)) return
         jobs.remove(key)?.cancel()
-        store.modelStatus = store.modelStatus + (key to "正在获取模型列表…"); changed()
+        store.modelStatus = store.modelStatus + (key to AgentNotice("model.catalog_loading", "正在获取模型列表…")); changed()
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 val usedKey = secrets.read(settings)
@@ -90,9 +90,9 @@ internal class AgentModelCatalog(private val store: AgentStore, private val secr
                     }
                 }
                 if (models.isNotEmpty()) onValidated(settings, usedKey)
-                store.modelStatus = store.modelStatus + (key to "已获取 ${models.size} 个模型")
+                store.modelStatus = store.modelStatus + (key to AgentNotice("model.catalog_count", "已获取 {count} 个模型", mapOf("count" to models.size.toString())))
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { store.modelStatus = store.modelStatus + (key to (error.message?.take(240) ?: "模型列表获取失败，已保留原列表")) }
+            catch (error: Exception) { store.modelStatus = store.modelStatus + (key to ((error as? ModelCatalogFailure)?.notice ?: AgentNotice("model.catalog_failed", "模型列表获取失败，已保留原列表"))) }
             finally { changed() }
         }
         jobs[key] = job; job.start()

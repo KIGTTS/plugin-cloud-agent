@@ -19,7 +19,7 @@ class AgentStore(private val storage: PluginStorage) {
     @Volatile var modelPickerConversation: String? = null
     @Volatile var modelFilter = ""
     @Volatile var modelOffset = 0
-    @Volatile var modelStatus: Map<String, String> = emptyMap()
+    @Volatile internal var modelStatus: Map<String, AgentNotice> = emptyMap()
     private val history = mutableMapOf<String, Int>()
     @Synchronized fun historyBefore(id: String): Int? = history[id]
     @Synchronized fun latestHistory(id: String) { history.remove(id) }

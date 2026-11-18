@@ -8,9 +8,11 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.29")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.30")
     override val localization = PluginLocalization("zh-CN", listOf("zh-CN", "zh-CN-x-casual", "en", "ko", "ja"))
     private var strings = PluginStrings(emptyMap())
+    private fun copyFor(locale: String): AgentCopy = { key, fallback -> strings.text(key, locale, fallback = fallback) }
+
     private lateinit var environment: PluginEnvironment
     private lateinit var store: AgentStore
     private lateinit var secrets: AgentSecrets
@@ -32,7 +34,7 @@ class CloudAgentPlugin : KigPlugin {
         if (store.settings.access == AgentAccessMode.FULL && !store.settings.fullAccessConfirmed)
             store.updateSettings { it.copy(access = AgentAccessMode.REQUEST_APPROVAL) }
         secrets = KeystoreAgentSecrets(environment.storage)
-        notifications = AgentTaskNotifications(store, environment)
+        notifications = AgentTaskNotifications(store, environment, copyFor = ::copyFor)
         taskBadges = AgentTaskBadges(store, environment.storage)
         runner = ConcurrentAgentRunner(store, secrets, environment, ::changed) { id, running ->
             taskBadges.changed(id, running); notifications.changed(id, running)
@@ -56,21 +58,25 @@ class CloudAgentPlugin : KigPlugin {
         SettingsEntry("settings", copy("entry.settings", "助手设置"), "settings", PluginIcon.SETTINGS, cardId = "assistant", cardTitle = copy("entry.assistant", "AI 助手"), summary = copy("entry.settings.summary", "服务、模型与密钥"), order = 1)),
         automationActions = listOf("open"))
     }
-    override fun page(pageId: String, context: PluginContext) = searchSettings.decorate(searchSettings.page(pageId) ?: agentPage(pageId, store, runner, secrets, context) { key, fallback -> strings.text(key, context.locale, fallback = fallback) })
+    override fun page(pageId: String, context: PluginContext): PluginPage? {
+        val copy = copyFor(context.locale)
+        return searchSettings.decorate(searchSettings.page(pageId, copy) ?: agentPage(pageId, store, runner, secrets, context, copy))
+    }
     override suspend fun execute(actionId: String, context: PluginContext): PluginOutcome {
+        val copy = copyFor(context.locale)
         val value = context.inputs["value"].orEmpty()
         try {
             AgentFileActions(environment, store).handle(actionId, context)?.let { changed(); return it }
-            searchSettings.handle(actionId, value)?.let { outcome ->
+            searchSettings.handle(actionId, value, copy)?.let { outcome ->
                 if (actionId.startsWith("search-offer/chat-viewed/")) taskBadges.viewed(actionId.removePrefix("search-offer/chat-viewed/"))
                 changed(); return outcome
             }
-            providers.handle(actionId, context)?.let { changed(); return it }
+            providers.handle(actionId, context, copy)?.let { changed(); return it }
             val result = when {
                 actionId == "overlay-add" -> {
                     if (registerAgentOverlay(environment, true)) {
                         store.updateSettings { it.copy(overlayShortcut = true) }; PluginOutcome.RefreshUi
-                    } else PluginOutcome.Message("请允许悬浮窗权限后重试")
+                    } else PluginOutcome.Message(copy("chat.overlay_permission", "请允许悬浮窗权限后重试"))
                 }
                 actionId == "open" -> {
                     taskBadges.attentionConversation()?.let(store::select)
@@ -83,12 +89,12 @@ class CloudAgentPlugin : KigPlugin {
                     val messageId = parts.getOrNull(0).orEmpty()
                     val index = parts.getOrNull(1)?.toIntOrNull() ?: return PluginOutcome.RefreshUi
                     val option = conversation.messages.firstOrNull { it.id == messageId }?.options?.getOrNull(index)
-                    requireNotNull(option) { "选项已失效，请重新生成问题" }
+                    requireNotNull(option) { copy("chat.option_expired", "选项已失效，请重新生成问题") }
                     runner.send(conversation.id, option.value.ifBlank { option.label })
                     PluginOutcome.RefreshUi
                 }
                 actionId in setOf("settings", "conversations", "connections", "dialogue-settings", "connection-settings") -> PluginOutcome.OpenPage(actionId)
-                actionId == "chat-menu" -> PluginOutcome.Menu("会话", listOf(PageAction("settings", "助手设置", PluginIcon.SETTINGS)))
+                actionId == "chat-menu" -> PluginOutcome.Menu(copy("chat.list", "会话"), listOf(PageAction("settings", copy("entry.settings", "助手设置"), PluginIcon.SETTINGS)))
                 actionId == "new" -> {
                     val selected = store.selected()
                     if (selected == null || selected.messages.isNotEmpty() || selected.draftImages.isNotEmpty() || selected.queued.isNotEmpty() || runner.isRunning(selected.id)) store.create()
@@ -97,7 +103,7 @@ class CloudAgentPlugin : KigPlugin {
                 actionId.startsWith("select/") -> { store.select(actionId.removePrefix("select/")); PluginOutcome.OpenPage("chat") }
                 actionId.startsWith("rename/") -> {
                     val id = actionId.removePrefix("rename/")
-                    PluginOutcome.TextInput("会话名称", "rename-save/$id", requireNotNull(store.get(id)).title)
+                    PluginOutcome.TextInput(copy("chat.name", "会话名称"), "rename-save/$id", requireNotNull(store.get(id)).title)
                 }
                 actionId.startsWith("rename-save/") -> {
                     require(value.trim().length in 1..80)
@@ -106,24 +112,24 @@ class CloudAgentPlugin : KigPlugin {
                 }
                 actionId.startsWith("delete/") -> {
                     val id = actionId.removePrefix("delete/")
-                    check(!runner.isRunning(id)) { "请先停止此会话的回答" }
-                    val conversation = requireNotNull(store.get(id)) { "会话不存在" }
-                    PluginOutcome.Confirm("删除会话？", "将删除“${conversation.title}”的所有消息，无法恢复。",
-                        PageAction("delete-confirm/$id", "删除", PluginIcon.NONE, symbol = "delete"))
+                    check(!runner.isRunning(id)) { copy("chat.stop_before_edit", "请先停止此会话的回答") }
+                    val conversation = requireNotNull(store.get(id)) { copy("chat.gone", "会话不存在") }
+                    PluginOutcome.Confirm(copy("chat.delete_title", "删除会话？"), strings.text("chat.delete_body", context.locale, mapOf("name" to conversation.title)),
+                        PageAction("delete-confirm/$id", copy("chat.delete", "删除"), PluginIcon.NONE, symbol = "delete"))
                 }
                 actionId.startsWith("delete-confirm/") -> {
                     val id = actionId.removePrefix("delete-confirm/")
-                    check(!runner.isRunning(id)) { "请先停止此会话的回答" }
+                    check(!runner.isRunning(id)) { copy("chat.stop_before_edit", "请先停止此会话的回答") }
                     store.delete(id); PluginOutcome.RefreshUi
                 }
                 actionId == "attach-image" -> {
                     val conversation = store.target(context) ?: store.create()
-                    if (context.inputs["source"] == "camera") PluginOutcome.CapturePhoto("拍照", "imports/chat-source", "attach-image-complete/" + conversation.id)
-                    else PluginOutcome.ImportResource("添加图片", "imports/chat-source", "attach-image-complete/" + conversation.id, mimeTypes = listOf("image/*"))
+                    if (context.inputs["source"] == "camera") PluginOutcome.CapturePhoto(copy("chat.take_photo", "拍照"), "imports/chat-source", "attach-image-complete/" + conversation.id)
+                    else PluginOutcome.ImportResource(copy("chat.add_images", "添加图片"), "imports/chat-source", "attach-image-complete/" + conversation.id, mimeTypes = listOf("image/*"))
                 }
                 actionId.startsWith("attach-image-complete/") -> {
                     val conversation = requireNotNull(store.get(actionId.substringAfter('/')))
-                    require(conversation.draftImages.size < 4) { "每条消息最多四张图片" }
+                    require(conversation.draftImages.size < 4) { copy("chat.image_limit", "每条消息最多四张图片") }
                     val image = AgentImages(environment.storage).prepare(requireNotNull(context.inputs["resourcePath"]))
                     store.modify(conversation.id) { current -> require(current.draftImages.size < 4); current.copy(draftImages = current.draftImages + image) }
                     context.inputs["resourcePath"]?.takeIf { it.startsWith("imports/chat-source/") }?.let { environment.storage.file(it).delete() }
@@ -134,7 +140,7 @@ class CloudAgentPlugin : KigPlugin {
                     store.modify(conversation.id) { current -> current.copy(draftImages = current.draftImages.filterNot { it.path == path }) }; PluginOutcome.RefreshUi
                 }
                 actionId == "queue" || actionId == "steer" -> {
-                    require(context.inputs["_callerPlugin"] == null) { "只能由用户发送插队消息" }
+                    require(context.inputs["_callerPlugin"] == null) { copy("chat.user_queue", "只能由用户发送插队消息") }
                     val conversation = store.target(context) ?: store.create()
                     runner.enqueue(conversation.id, context.inputs["message"].orEmpty(), actionId == "steer"); PluginOutcome.RefreshUi
                 }
@@ -166,15 +172,15 @@ class CloudAgentPlugin : KigPlugin {
                 actionId.startsWith("notification-open/") -> { store.select(actionId.substringAfter('/')); PluginOutcome.OpenPage("chat") }
                 actionId.startsWith("notification-stop/") -> { runner.stopConversation(actionId.substringAfter('/')); PluginOutcome.RefreshUi }
                 actionId.startsWith("export-conversation/") -> {
-                    val conversation = store.get(actionId.substringAfter('/')) ?: return PluginOutcome.Message("会话不存在")
+                    val conversation = store.get(actionId.substringAfter('/')) ?: return PluginOutcome.Message(copy("chat.gone", "会话不存在"))
                     val path = "exports/conversation-${conversation.id}.json"
                     val file = environment.storage.file(path); file.parentFile?.mkdirs()
                     file.writeText(PluginJson.encodeToString(conversation), Charsets.UTF_8)
-                    PluginOutcome.ExportResource("导出会话", PluginResource(path), "助手会话.json", mimeType = "application/json")
+                    PluginOutcome.ExportResource(copy("chat.export", "导出会话"), PluginResource(path), "助手会话.json", mimeType = "application/json")
                 }
                 actionId.startsWith("access/") -> {
-                    require(context.inputs["_callerPlugin"] == null) { "请通过会话输入栏切换权限" }
-                    if (actionId == "access/full") require(store.settings.fullAccessConfirmed || context.inputs["_agentFullConfirmed"] == "true") { "请先确认完全访问警告" }
+                    require(context.inputs["_callerPlugin"] == null) { copy("chat.access_field", "请通过会话输入栏切换权限") }
+                    if (actionId == "access/full") require(store.settings.fullAccessConfirmed || context.inputs["_agentFullConfirmed"] == "true") { copy("chat.confirm_full", "请先确认完全访问警告") }
                     store.updateSettings { it.copy(access = when (actionId) { "access/full" -> AgentAccessMode.FULL; "access/assist" -> AgentAccessMode.ASSISTED; else -> AgentAccessMode.REQUEST_APPROVAL },
                         fullAccessConfirmed = it.fullAccessConfirmed || context.inputs["_agentFullConfirmed"] == "true") }
                     val target = store.target(context)?.id
@@ -189,39 +195,39 @@ class CloudAgentPlugin : KigPlugin {
                     PluginOutcome.RefreshUi
                 }
                 actionId == "tools" -> {
-                    check(!runner.running) { "请先停止当前回答" }; store.updateSettings { it.copy(toolsEnabled = !it.toolsEnabled) }; PluginOutcome.RefreshUi
+                    check(!runner.running) { copy("chat.stop_first", "请先停止当前回答") }; store.updateSettings { it.copy(toolsEnabled = !it.toolsEnabled) }; PluginOutcome.RefreshUi
                 }
                 actionId == "review" -> reviews.open(store.target(context)?.id)
                 actionId == "resume" -> reviews.resume(store.target(context)?.id)
                 actionId == "discard-review" -> reviews.discard(store.target(context)?.id)
-                actionId == "import-cards" -> PluginOutcome.ImportResource("导入快捷文本", "resources/quick-imports", "import-cards-complete")
+                actionId == "import-cards" -> PluginOutcome.ImportResource(copy("chat.import_quick", "导入快捷文本"), "resources/quick-imports", "import-cards-complete")
                 actionId == "import-cards-complete" -> {
                     val broker = requireNotNull(environment.quickTextBroker)
                     val revision = (broker.request(QuickTextCommand.Query(limit = 0)) as QuickTextReply.Snapshot).value.revision
                     val source = PluginResource(requireNotNull(context.inputs["resourcePath"]))
-                    prepared(broker.request(QuickTextCommand.Import(source, UUID.randomUUID().toString(), revision)))
+                    prepared(broker.request(QuickTextCommand.Import(source, UUID.randomUUID().toString(), revision)), copy)
                 }
                 actionId == "export-cards" -> when (val reply = requireNotNull(environment.quickTextBroker).request(QuickTextCommand.Export())) {
-                    is QuickTextReply.Resource -> PluginOutcome.ExportResource("导出快捷文本", reply.source, "快捷文本.kigcards")
-                    else -> PluginOutcome.Message((reply as? QuickTextReply.Failure)?.message ?: "导出未完成")
+                    is QuickTextReply.Resource -> PluginOutcome.ExportResource(copy("chat.export_quick", "导出快捷文本"), reply.source, "快捷文本.kigcards")
+                    else -> PluginOutcome.Message((reply as? QuickTextReply.Failure)?.message ?: copy("chat.export_failed", "导出未完成"))
                 }
-                else -> PluginOutcome.Message("未知助手操作")
+                else -> PluginOutcome.Message(copy("chat.unknown_action", "未知助手操作"))
             }
             changed(); return result
-        } catch (error: IllegalArgumentException) { return PluginOutcome.Message(error.message?.take(200) ?: "请检查输入内容") }
+        } catch (error: IllegalArgumentException) { return PluginOutcome.Message(error.message?.take(200) ?: copy("chat.invalid_input", "请检查输入内容")) }
         catch (error: IllegalStateException) {
             return when (error.message) {
-                "请选择可用模型" -> PluginOutcome.Dialog("选择模型", "请选择可用模型")
-                "暂无可用模型，请先在供应商配置中填写 API 密钥并刷新模型列表" -> PluginOutcome.Dialog("暂无可用模型", "请先配置供应商的 API 密钥，再回到模型选择中刷新列表。")
-                else -> PluginOutcome.Message(error.message?.take(200) ?: "操作暂时无法完成")
+                "请选择可用模型" -> PluginOutcome.Dialog(copy("model.choose", "选择模型"), copy("chat.model_required", "请选择可用模型"))
+                "暂无可用模型，请先在供应商配置中填写 API 密钥并刷新模型列表" -> PluginOutcome.Dialog(copy("chat.no_models", "暂无可用模型"), copy("chat.no_models_help", "请先配置供应商的 API 密钥，再回到模型选择中刷新列表。"))
+                else -> PluginOutcome.Message(error.message?.take(200) ?: copy("chat.action_failed", "操作暂时无法完成"))
             }
         }
-        catch (_: java.io.IOException) { return PluginOutcome.Message("文件暂时无法保存，请稍后重试") }
+        catch (_: java.io.IOException) { return PluginOutcome.Message(copy("chat.file_failed", "文件暂时无法保存，请稍后重试")) }
     }
-    private suspend fun prepared(reply: QuickTextReply): PluginOutcome {
-        if (reply !is QuickTextReply.Prepared) return PluginOutcome.Message((reply as? QuickTextReply.Failure)?.message ?: "导入未完成")
+    private suspend fun prepared(reply: QuickTextReply, copy: AgentCopy): PluginOutcome {
+        if (reply !is QuickTextReply.Prepared) return PluginOutcome.Message((reply as? QuickTextReply.Failure)?.message ?: copy("chat.import_failed", "导入未完成"))
         val conversation = store.selected() ?: store.create()
-        store.setPending(PendingReview(conversation.id, "", reply.value.token, "导入内容已准备好，请审核"))
+        store.setPending(PendingReview(conversation.id, "", reply.value.token, copy("chat.import_review", "导入内容已准备好，请审核")))
         return reviews.open()
     }
     override suspend fun close() { if (::catalog.isInitialized) catalog.close(); if (::runner.isInitialized) runner.close(); if (::notifications.isInitialized) notifications.close(); uiSignals.close() }

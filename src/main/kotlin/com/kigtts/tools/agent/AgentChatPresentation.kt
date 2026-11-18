@@ -57,10 +57,10 @@ internal fun agentChat(store: AgentStore, runner: AgentRunner, secrets: AgentSec
     }
     return PageBlock.Chat(messages, "send", "stop", runner.runningConversation == conversation?.id && runner.running,
         placeholder = copy("chat.placeholder", "发送消息"), conversationId = conversation?.id.orEmpty(), controls = listOf(
-            ChatControl(copy("control.provider", "供应商"), providerOptions(store, true, secrets).map { ChatOption(it.id, it.label) }, providerAction(settings, true), ChatControlKind.PROVIDER),
-            ChatControl(copy("control.model", "选择模型"), modelOptions(store, settings, secrets), modelAction(settings, profile.model, true)),
+            ChatControl(copy("control.provider", "供应商"), providerOptions(store, true, secrets, copy).map { ChatOption(it.id, it.label) }, providerAction(settings, true), ChatControlKind.PROVIDER),
+            ChatControl(copy("control.model", "选择模型"), modelOptions(store, settings, secrets, copy), modelAction(settings, profile.model, true)),
             ChatControl(copy("control.access", "权限"), listOf(ChatOption("access/ask", copy("access.ask", "手动审核"), "ask"), ChatOption("access/assist", copy("access.assist", "帮我批准"), "assist"), ChatOption("access/full", copy("access.full", "完全访问"), "full")),
-                when (settings.access) { AgentAccessMode.FULL -> "access/full"; AgentAccessMode.ASSISTED -> "access/assist"; else -> "access/ask" }, ChatControlKind.ACCESS)) + reasoningControl(settings),
+                when (settings.access) { AgentAccessMode.FULL -> "access/full"; AgentAccessMode.ASSISTED -> "access/assist"; else -> "access/ask" }, ChatControlKind.ACCESS)) + reasoningControl(settings, copy),
         approval = pending?.let { ChatApproval(copy("chat.approval", "请求批准"), "resume", "discard-review", it.summary.take(4000),
             if (it.token.isNotEmpty()) "review" else null) }, backgroundRunning = runner.running, imageAction = "attach-image", removeImageAction = "remove-image",
         draftImages = conversation?.draftImages.orEmpty().map { ChatImage(PluginResource(it.path), it.description) },

@@ -25,9 +25,9 @@ internal fun agentPage(id: String, store: AgentStore, runner: AgentRunner, secre
                     actions = listOf(PageAction("export-conversation/${conversation.id}", copy("chat.export", "导出会话"), PluginIcon.EXPORT),
                         PageAction("rename/${conversation.id}", copy("chat.rename", "重命名"), PluginIcon.EDIT), PageAction("delete/${conversation.id}", copy("chat.delete", "删除"), PluginIcon.CLOSE)))
             }, emptyText = copy("chat.empty", "创建会话，开始聊天")))
-        "models" -> modelPickerPage(store, secrets)
-        "providers" -> providersPage(store)
-        "provider-templates" -> providerTemplatesPage()
+        "models" -> modelPickerPage(store, secrets, copy)
+        "providers" -> providersPage(store, copy)
+        "provider-templates" -> providerTemplatesPage(copy)
         else -> agentSettingsPage(id, store, secrets, copy)
     }
 }
