@@ -174,5 +174,12 @@
   "runner.check_queue": "Finish reviewing the pending action first",
   "runner.queue_limit": "Too many messages in the queue",
   "runner.queue_order": "The queue changed. Reorder it again.",
-  "runner.queue_gone": "This message is no longer in the queue"
+  "runner.queue_gone": "This message is no longer in the queue",
+  "review.none": "There’s nothing to review.",
+  "review.external": "Open the original screen to finish reviewing.",
+  "review.open_failed": "The review screen couldn’t open. Try again.",
+  "review.discard_failed": "Cancellation couldn’t be confirmed. Try again.",
+  "review.external_status": "Check the original screen for the status.",
+  "review.no_resume": "There’s nothing to resume.",
+  "review.apply_failed": "The changes haven’t been applied. Try again."
 }

@@ -174,5 +174,12 @@
   "runner.check_queue": "请先处理待批准或结果待核对的操作",
   "runner.queue_limit": "待发送消息过多",
   "runner.queue_order": "队列已更新，请重新排序",
-  "runner.queue_gone": "此消息已离开队列"
+  "runner.queue_gone": "此消息已离开队列",
+  "review.none": "没有待审核操作",
+  "review.external": "请先在对应页面检查并完成审核",
+  "review.open_failed": "无法打开审核页面，请重试",
+  "review.discard_failed": "尚未确认取消，请重试",
+  "review.external_status": "请在对应页面查看操作状态",
+  "review.no_resume": "没有待继续操作",
+  "review.apply_failed": "尚未应用更改，请重试"
 }

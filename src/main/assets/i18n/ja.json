@@ -174,5 +174,12 @@
   "runner.check_queue": "先に保留中の操作を確認してください",
   "runner.queue_limit": "キューのメッセージが多すぎます",
   "runner.queue_order": "キューが変更されました。並べ直してください",
-  "runner.queue_gone": "このメッセージはキューにありません"
+  "runner.queue_gone": "このメッセージはキューにありません",
+  "review.none": "確認待ちの操作はありません。",
+  "review.external": "元の画面で確認を完了してください。",
+  "review.open_failed": "確認画面を開けませんでした。もう一度お試しください。",
+  "review.discard_failed": "取り消しを確認できませんでした。もう一度お試しください。",
+  "review.external_status": "元の画面で操作の状態を確認してください。",
+  "review.no_resume": "再開する操作はありません。",
+  "review.apply_failed": "変更がまだ適用されていません。もう一度お試しください。"
 }

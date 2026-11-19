@@ -8,7 +8,7 @@ import kotlinx.serialization.encodeToString
 import java.util.UUID
 
 class CloudAgentPlugin : KigPlugin {
-    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.31")
+    override val descriptor = PluginDescriptor("tools.cloud-agent", "AI 助手", "聊天、查资料，制作快捷文本和小工具", version = "0.9.32")
     override val localization = PluginLocalization("zh-CN", listOf("zh-CN", "zh-CN-x-casual", "en", "ko", "ja"))
     private var strings = PluginStrings(emptyMap())
     private fun copyFor(locale: String): AgentCopy = { key, fallback -> strings.text(key, locale, fallback = fallback) }
@@ -46,7 +46,7 @@ class CloudAgentPlugin : KigPlugin {
         catalog.refresh(store.settings.configuredConnection())
         if (store.settings.overlayShortcut) runCatching { registerAgentOverlay(environment, false) }
         if (store.settings.access == AgentAccessMode.FULL && store.settings.toolsEnabled)
-            store.list().mapNotNull { store.pendingFor(it.id) }.forEach { reviews.resume(it.conversationId) }
+            store.list().mapNotNull { store.pendingFor(it.id) }.forEach { reviews.resume(it.conversationId, copyFor("zh-CN")) }
     }
     override val contributions get(): PluginContributions = contributions(PluginContext("", ""))
     override fun contributions(context: PluginContext): PluginContributions {
@@ -184,7 +184,7 @@ class CloudAgentPlugin : KigPlugin {
                     store.updateSettings { it.copy(access = when (actionId) { "access/full" -> AgentAccessMode.FULL; "access/assist" -> AgentAccessMode.ASSISTED; else -> AgentAccessMode.REQUEST_APPROVAL },
                         fullAccessConfirmed = it.fullAccessConfirmed || context.inputs["_agentFullConfirmed"] == "true") }
                     val target = store.target(context)?.id
-                    if (actionId == "access/full" && target?.let(store::pendingFor)?.let { !runner.isRunning(it.conversationId) } == true) reviews.resume(target)
+                    if (actionId == "access/full" && target?.let(store::pendingFor)?.let { !runner.isRunning(it.conversationId) } == true) reviews.resume(target, copy)
                     else PluginOutcome.RefreshUi
                 }
                 actionId == "reasoning" -> { store.updateSettings { it.copy(showReasoning = !it.showReasoning) }; PluginOutcome.RefreshUi }
@@ -197,9 +197,9 @@ class CloudAgentPlugin : KigPlugin {
                 actionId == "tools" -> {
                     check(!runner.running) { copy("chat.stop_first", "请先停止当前回答") }; store.updateSettings { it.copy(toolsEnabled = !it.toolsEnabled) }; PluginOutcome.RefreshUi
                 }
-                actionId == "review" -> reviews.open(store.target(context)?.id)
-                actionId == "resume" -> reviews.resume(store.target(context)?.id)
-                actionId == "discard-review" -> reviews.discard(store.target(context)?.id)
+                actionId == "review" -> reviews.open(store.target(context)?.id, copy)
+                actionId == "resume" -> reviews.resume(store.target(context)?.id, copy)
+                actionId == "discard-review" -> reviews.discard(store.target(context)?.id, copy)
                 actionId == "import-cards" -> PluginOutcome.ImportResource(copy("chat.import_quick", "导入快捷文本"), "resources/quick-imports", "import-cards-complete")
                 actionId == "import-cards-complete" -> {
                     val broker = requireNotNull(environment.quickTextBroker)
@@ -229,7 +229,7 @@ class CloudAgentPlugin : KigPlugin {
         if (reply !is QuickTextReply.Prepared) return PluginOutcome.Message((reply as? QuickTextReply.Failure)?.message ?: copy("chat.import_failed", "导入未完成"))
         val conversation = store.selected() ?: store.create()
         store.setPending(PendingReview(conversation.id, "", reply.value.token, copy("chat.import_review", "导入内容已准备好，请审核")))
-        return reviews.open()
+        return reviews.open(copy = copy)
     }
     override suspend fun close() { if (::catalog.isInitialized) catalog.close(); if (::runner.isInitialized) runner.close(); if (::notifications.isInitialized) notifications.close(); uiSignals.close() }
 }
